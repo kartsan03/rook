@@ -1,0 +1,46 @@
+[
+  {
+    "niche": "Software Engineering & Backend",
+    "median_market_er": 2.5,
+    "benchmarks": {
+      "conservative_conversion_rate": 0.005,
+      "moderate_conversion_rate": 0.015,
+      "aggressive_conversion_rate": 0.03
+    },
+    "average_ticket_price_usd": 250,
+    "data_confidence_score": 0.92
+  },
+  {
+    "niche": "Lifestyle & Vlogs",
+    "median_market_er": 4.0,
+    "benchmarks": {
+      "conservative_conversion_rate": 0.001,
+      "moderate_conversion_rate": 0.005,
+      "aggressive_conversion_rate": 0.01
+    },
+    "average_ticket_price_usd": 50,
+    "data_confidence_score": 0.85
+  },
+  {
+    "niche": "Fitness & Health",
+    "median_market_er": 3.0,
+    "benchmarks": {
+      "conservative_conversion_rate": 0.003,
+      "moderate_conversion_rate": 0.01,
+      "aggressive_conversion_rate": 0.02
+    },
+    "average_ticket_price_usd": 150,
+    "data_confidence_score": 0.88
+  },
+  {
+    "niche": "Unknown",
+    "median_market_er": 2.0,
+    "benchmarks": {
+      "conservative_conversion_rate": 0.002,
+      "moderate_conversion_rate": 0.01,
+      "aggressive_conversion_rate": 0.02
+    },
+    "average_ticket_price_usd": 100,
+    "data_confidence_score": 0.50
+  }
+]

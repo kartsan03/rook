@@ -1,0 +1,20 @@
+{
+  "name": "rook",
+  "version": "1.0.0",
+  "description": "Creator dossier pipeline: scrape a YouTube or Instagram creator's recent content, score audience engagement, and generate a sales dossier with revenue estimates computed in code.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "batch": "node src/batch_analyze.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.52.0",
+    "apify-client": "^2.23.2",
+    "dotenv": "^17.4.2",
+    "openai": "^6.37.0",
+    "youtube-transcript": "^1.3.1"
+  }
+}

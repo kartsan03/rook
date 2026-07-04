@@ -1,0 +1,11 @@
+# One target per line. Lines starting with # are ignored.
+
+# YouTube: channel URL, handle, or a single video URL (the channel is resolved from it)
+https://www.youtube.com/@TechLead
+yt:SomeChannelHandle
+
+# Instagram: profile URL or ig:username
+ig:some_creator
+
+# Fusion (same creator on both platforms): youtube_input | instagram_input
+https://www.youtube.com/@TechLead | techlead

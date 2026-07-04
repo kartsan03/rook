@@ -1,0 +1,12 @@
+node_modules/
+.env
+
+# Scraped data and generated dossiers contain personal data — never commit them
+data/*
+!data/.gitkeep
+audits/*
+!audits/.gitkeep
+
+# Your own prospecting list
+targets.txt
+targets.json
