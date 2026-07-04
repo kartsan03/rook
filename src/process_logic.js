@@ -4,6 +4,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { generate } from './llm.js';
 import { isSignal } from './comment_filter.js';
+import { calculateCore, detectGeoTier, estimateRevenue } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -48,16 +49,6 @@ if (totalCleanComments === 0) {
 
 const videoViews = creatorData.videos.filter(v => v.metrics.views > 0).map(v => v.metrics.views);
 
-// Core audience = roughly the 10th percentile of views, i.e. the floor the
-// creator reaches without algorithmic hype. Guarded for tiny video counts.
-function calculateCore(viewsArray) {
-    const validViews = viewsArray.filter(v => v > 0).sort((a, b) => a - b);
-    if (validViews.length === 0) return 0;
-    if (validViews.length <= 2) return validViews[0];
-    if (validViews.length <= 10) return validViews[1];
-    return validViews[Math.floor(validViews.length * 0.1)];
-}
-
 // Fusion mode pre-computes the core across platforms; single platform computes it here.
 const coreAudienceViews = creatorData.global_metrics.fused_core_audience || calculateCore(videoViews);
 const deadAudienceWarning = creatorData.global_metrics.fusion_warning || '';
@@ -68,55 +59,19 @@ const snr = (totalCleanComments / totalRawComments) * 100;
 // ---------------------------------------------------------
 // DETERMINISTIC REVENUE MATH (the LLM never touches these numbers)
 // ---------------------------------------------------------
-let basePrice = nicheBenchmark.average_ticket_price_usd;
-
-// Geo-pricing: if most comment text is Cyrillic or Devanagari, price for Tier 3.
-let cyrillicCharCount = 0;
-let hindiCharCount = 0;
-let geoCharCount = 0;
-
-creatorData.videos.forEach(v => {
-    (v.top_comments || []).forEach(c => {
-        const cleanText = c.text.replace(/[\p{Emoji}\s\d\p{Punctuation}]/gu, '');
-        if (cleanText.length === 0) return;
-        geoCharCount += cleanText.length;
-        cyrillicCharCount += (cleanText.match(/[Ѐ-ӿ]/g) || []).length;
-        hindiCharCount += (cleanText.match(/[ऀ-ॿ]/g) || []).length;
-    });
-});
-
-const cyrillicRatio = geoCharCount > 0 ? cyrillicCharCount / geoCharCount : 0;
-const hindiRatio = geoCharCount > 0 ? hindiCharCount / geoCharCount : 0;
-
-let geoReason = 'Tier 1/2 (Global)';
-if (cyrillicRatio > 0.5) geoReason = 'Tier 3 (CIS, Cyrillic > 50%)';
-if (hindiRatio > 0.5) geoReason = 'Tier 3 (India, Hindi > 50%)';
-
-if (cyrillicRatio > 0.5 || hindiRatio > 0.5) {
-    basePrice = Math.floor(basePrice * 0.3);
-}
-
-// No ghosting/bot double penalties here: the core-audience floor already
-// excludes dead reach, and ghosting is a selling angle, not a conversion cut.
-let crMultiplier = 1.0;
-const penaltyReasons = [];
-
-if (snr < 5) {
-    crMultiplier *= 0.2;
-    penaltyReasons.push('Low SNR (<5%)');
-}
-
+// No ghosting/bot double penalties: the core-audience floor already excludes
+// dead reach, and ghosting is a selling angle, not a conversion cut.
+const { isTier3, reason: geoReason } = detectGeoTier(creatorData.videos);
 const botProb = creatorData.global_metrics.bot_probability || 0.05;
-if (botProb >= 0.4) {
-    crMultiplier *= 0.5;
-    penaltyReasons.push(`High probability of fake/decayed audience (${(botProb * 100).toFixed(0)}%)`);
-}
 
-const crConservative = nicheBenchmark.benchmarks.conservative_conversion_rate * crMultiplier;
-const crModerate = nicheBenchmark.benchmarks.moderate_conversion_rate * crMultiplier;
-
-const revConservative = Math.floor(coreAudienceViews * crConservative * basePrice);
-const revModerate = Math.floor(coreAudienceViews * crModerate * basePrice);
+const { basePrice, crMultiplier, penaltyReasons, conservative: revConservative, moderate: revModerate } =
+    estimateRevenue({
+        coreViews: coreAudienceViews,
+        benchmark: nicheBenchmark,
+        snr,
+        botProbability: botProb,
+        isTier3,
+    });
 
 const financialBlock = `
 ## 4. FINANCIAL MODEL (Reality Check)

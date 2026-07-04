@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { calculateCore } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -25,15 +26,6 @@ const ytData = JSON.parse(fs.readFileSync(ytPath, 'utf8'));
 const igData = JSON.parse(fs.readFileSync(igPath, 'utf8'));
 
 console.log(`Fusing data for ${ytHandle} (YT) and @${igHandle} (IG)...`);
-
-// Core audience = roughly the 10th percentile of views (see process_logic.js).
-function calculateCore(viewsArray) {
-    const validViews = viewsArray.filter(v => v > 0).sort((a, b) => a - b);
-    if (validViews.length === 0) return 0;
-    if (validViews.length <= 2) return validViews[0];
-    if (validViews.length <= 10) return validViews[1];
-    return validViews[Math.floor(validViews.length * 0.1)];
-}
 
 const ytViewsArray = ytData.videos.map(v => v.metrics.views);
 const igViewsArray = igData.videos.map(v => v.metrics.views);
