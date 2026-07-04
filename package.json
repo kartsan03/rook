@@ -8,7 +8,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "batch": "node src/batch_analyze.js"
+    "batch": "node src/batch_analyze.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",
