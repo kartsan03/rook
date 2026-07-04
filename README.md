@@ -1,5 +1,7 @@
 # rook
 
+[![CI](https://github.com/kartsan03/rook/actions/workflows/ci.yml/badge.svg)](https://github.com/kartsan03/rook/actions/workflows/ci.yml)
+
 Rook builds a sales dossier on a content creator from their public footprint. It scrapes a creator's recent YouTube videos and/or Instagram posts (metadata, comments, transcripts), computes engagement metrics in plain code, and uses an LLM to turn the material into two documents: an audience analysis ("The Brief") and a "Master Sales Dossier" with a product offer, direct audience quotes, a revenue estimate, and a ready-to-send outreach message.
 
 It exists for teams that sell to creators: agencies, course platforms, community tools, creator-economy startups. Before you pitch a creator, you want to know whether their audience is alive, what those viewers are asking for, what product would fit, and what number belongs in the cold DM. Rook answers that in one run per creator, for a few cents of API cost.
@@ -92,10 +94,12 @@ The `--niche` value selects a row in `config/mock_benchmarks.json` (conversion r
 - `audits/investment_brief_<handle>_<timestamp>.md`: the final dossier, including the financial model and the outreach text
 - `audits/debug_<run>_draft.md`, `audits/debug_<run>_critique.md`: intermediate LLM passes, kept for inspection
 
+`examples/` contains a full brief and dossier for a fictional creator, so you can see the output format without running anything.
+
 ## Checking your setup
 
 ```bash
-node --check src/*.js        # or: for f in src/*.js; do node --check "$f"; done
+npm test          # unit tests for the metrics and filtering logic
 yt-dlp --version
 ```
 
@@ -113,6 +117,9 @@ src/
   batch_analyze.js          runs the pipeline over a targets file
   llm.js                    Gemini calls, retry/backoff, OpenAI fallback
   comment_filter.js         shared comment noise filter
+  metrics.js                core-audience, geo and revenue math (pure functions)
+test/                       unit tests for the pure logic (node --test)
+examples/                   sample brief and dossier for a fictional creator
 config/mock_benchmarks.json niche conversion rates and ticket prices
 data/                       scraped JSON (gitignored)
 audits/                     generated briefs and dossiers (gitignored)
