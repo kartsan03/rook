@@ -142,6 +142,7 @@ async function run() {
             creatorData.global_metrics.avg_views_last_10_videos = Math.floor(totalViews / videoCount);
         }
 
+        fs.mkdirSync(path.join(rootDir, 'data'), { recursive: true });
         const historyPath = path.join(rootDir, 'data', `raw_ig_${username}.json`);
         fs.writeFileSync(historyPath, JSON.stringify(creatorData, null, 2));
         fs.writeFileSync(path.join(rootDir, 'data', 'latest_creator_data.json'), JSON.stringify(creatorData, null, 2));

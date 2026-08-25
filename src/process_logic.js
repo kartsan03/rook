@@ -1,4 +1,4 @@
-﻿import fs from 'fs';
+import fs from 'fs';
 import path from 'path';
 import 'dotenv/config';
 import { fileURLToPath } from 'url';
@@ -153,6 +153,7 @@ async function run() {
 
     console.log(`Strategy loop (draft -> critique -> final) for @${creatorData.handle}...`);
     try {
+        fs.mkdirSync(path.join(rootDir, 'audits'), { recursive: true });
         console.log('   [1/3] Strategist: drafting the offer...');
         const draft = await generate(`${synthPrompt}\n\nDATA:\n${contextText}`);
         fs.writeFileSync(path.join(rootDir, 'audits', `debug_${runId}_draft.md`), draft);

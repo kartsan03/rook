@@ -20,7 +20,8 @@ async function openaiGenerate(prompt) {
 }
 
 // Google 429 responses carry a RetryInfo detail with the wait the API asks for.
-function parseRetryDelayMs(errMsg) {
+// Exported for unit tests.
+export function parseRetryDelayMs(errMsg) {
     try {
         const errObj = JSON.parse(errMsg);
         const details = errObj.error?.details || [];

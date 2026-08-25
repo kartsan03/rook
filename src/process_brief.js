@@ -22,7 +22,9 @@ const rawData = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 
 const cleanVideos = rawData.videos.map(video => {
     const seenComments = new Set();
-    const cleanComments = video.top_comments.filter(comment => {
+    // Older raw files and some fusion paths may lack these fields.
+    const comments = video.top_comments || [];
+    const cleanComments = comments.filter(comment => {
         const text = comment.text.trim();
         if (!isSignal(text)) return false;
 
@@ -42,12 +44,12 @@ contextText += `Engagement metrics: Ghosting Rate: ${(rawData.global_metrics.gho
 
 cleanVideos.forEach((v, index) => {
     const platformTag = v.source_platform ? `[${v.source_platform.toUpperCase()}]` : '';
-    contextText += `--- Video ${index + 1}: ${v.title} ${platformTag} (Published: ${v.published_at.substring(0, 10)}) ---\n`;
+    contextText += `--- Video ${index + 1}: ${v.title} ${platformTag} (Published: ${(v.published_at || '').substring(0, 10)}) ---\n`;
     contextText += `Transcript (excerpt): ${v.transcript}\n`;
     contextText += `Filtered comments:\n`;
     v.top_comments.forEach(c => {
         const heartTag = c.has_heart ? '[hearted by creator]' : '';
-        contextText += `- [${c.date.substring(0, 10)}] ${c.text} ${heartTag}\n`;
+        contextText += `- [${(c.date || '').substring(0, 10)}] ${c.text} ${heartTag}\n`;
     });
     contextText += `\n`;
 });
@@ -90,6 +92,7 @@ async function run() {
     try {
         const textResponse = await generate(systemPrompt + '\n\nData context for analysis:\n' + contextText);
 
+        fs.mkdirSync(path.join(rootDir, 'audits'), { recursive: true });
         const briefPath = path.join(rootDir, 'audits', `the_brief_${rawData.handle}.md`);
         fs.writeFileSync(briefPath, textResponse);
         console.log(`Brief saved to: audits/the_brief_${rawData.handle}.md`);

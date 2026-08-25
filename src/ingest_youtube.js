@@ -79,8 +79,10 @@ for (let i = 0; i < videoIds.length; i++) {
             console.log(`Smart scaling: ${totalSubscribers} subscribers -> ${commentLimit} comments per video.`);
         }
 
+        // Fetching up to 200 comments routinely takes over a minute; a 60s timeout
+        // killed the fetch and silently dropped big channels out of the analysis.
         const metaCmd = `yt-dlp -j --write-comments --extractor-args youtube:max-comments=${commentLimit} "${videoUrl}"`;
-        const metaResult = execSync(metaCmd, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 50, timeout: 60000 });
+        const metaResult = execSync(metaCmd, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 50, timeout: 300000 });
         const meta = JSON.parse(metaResult.trim().split('\n')[0]);
 
         const topComments = [];
@@ -93,9 +95,13 @@ for (let i = 0; i < videoIds.length; i++) {
                 }
 
                 if (c.text && c.text.trim().length > 0) {
+                    const parsed = c.timestamp ? new Date(c.timestamp * 1000) : null;
+                    // A missing timestamp must not become an Invalid Date: it serializes to
+                    // null and crashes process_brief.js when formatting comment dates.
+                    const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : new Date().toISOString();
                     topComments.push({
                         text: c.text,
-                        date: new Date(c.timestamp * 1000).toISOString(),
+                        date: iso,
                         has_heart: c.is_favorited || false
                     });
                 }
@@ -148,6 +154,7 @@ if (totalSubscribers > 0) {
     else creatorData.global_metrics.bot_probability = 0.05;
 }
 
+fs.mkdirSync(path.join(rootDir, 'data'), { recursive: true });
 const historyPath = path.join(rootDir, 'data', `raw_${creatorData.handle}.json`);
 fs.writeFileSync(historyPath, JSON.stringify(creatorData, null, 2));
 
