@@ -82,6 +82,7 @@ Batch over a list (see `targets.example.txt` for the format; YouTube URLs, `ig:u
 
 ```bash
 node src/batch_analyze.js targets.txt --niche "Software Engineering & Backend"
+# or equivalently: npm run batch -- targets.txt --niche "..."
 ```
 
 The `--niche` value selects a row in `config/mock_benchmarks.json` (conversion rates and ticket price). An unknown niche falls back to the `Unknown` row. Edit that file to match your own market data; the shipped numbers are rough placeholder estimates.
