@@ -27,7 +27,7 @@ if (!username || !APIFY_TOKEN) {
 }
 
 const client = new ApifyClient({ token: APIFY_TOKEN });
-// Whisper transcription of Reels is optional; without an OpenAI key videos keep "Transcript unavailable."
+// Reels transcription is optional; without an OpenAI key videos keep "Transcript unavailable."
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
 async function run() {
@@ -71,7 +71,7 @@ async function run() {
         const { items: allComments } = await client.dataset(commentRun.defaultDatasetId).listItems();
         console.log(`Collected ${allComments.length} comments.`);
 
-        console.log('[3/4] Processing posts, transcribing videos (Whisper)...');
+        console.log('[3/4] Processing posts, transcribing videos...');
         const posts = profile.latestPosts || [];
         let totalViews = 0;
         let videoCount = 0;
@@ -102,13 +102,13 @@ async function run() {
 
                     const transcription = await openai.audio.transcriptions.create({
                         file: fs.createReadStream(tempAudioPath),
-                        model: 'whisper-1',
+                        model: 'gpt-transcribe',
                     });
                     transcriptText = transcription.text;
-                    console.log(`   Whisper OK: ${transcriptText.substring(0, 30)}...`);
+                    console.log(`   Transcription OK: ${transcriptText.substring(0, 30)}...`);
                     fs.unlinkSync(tempAudioPath);
                 } catch (err) {
-                    console.log(`   Whisper skipped: ${err.message}`);
+                    console.log(`   Transcription skipped: ${err.message}`);
                 }
             }
 

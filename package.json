@@ -1,7 +1,29 @@
 {
   "name": "rook",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Creator dossier pipeline: scrape a YouTube or Instagram creator's recent content, score audience engagement, and generate a sales dossier with revenue estimates computed in code.",
+  "keywords": [
+    "youtube",
+    "instagram",
+    "scraping",
+    "creator-economy",
+    "llm",
+    "gemini",
+    "lead-generation",
+    "outreach",
+    "yt-dlp",
+    "apify",
+    "nodejs"
+  ],
+  "author": "kartsan03",
+  "homepage": "https://github.com/kartsan03/rook#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kartsan03/rook.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kartsan03/rook/issues"
+  },
   "license": "MIT",
   "type": "module",
   "engines": {

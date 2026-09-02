@@ -21,6 +21,11 @@ if (!fs.existsSync(latestDataPath)) {
 }
 const creatorData = JSON.parse(fs.readFileSync(latestDataPath, 'utf8'));
 
+if (!creatorData.global_metrics || !Array.isArray(creatorData.videos)) {
+    console.error(`Error: ${latestDataPath} is not a creator data file (expected global_metrics and videos).`);
+    process.exit(1);
+}
+
 const briefPath = path.join(rootDir, 'audits', `the_brief_${creatorData.handle}.md`);
 if (!fs.existsSync(briefPath)) {
     console.error(`Error: brief for @${creatorData.handle} not found. Run process_brief.js first.`);
@@ -88,7 +93,7 @@ Handle: @${creatorData.handle}
 Platform: ${creatorData.platform}
 Niche: ${niche}
 Subscribers: ${creatorData.global_metrics.subscribers}
-Ghosting Rate: ${(creatorData.global_metrics.ghosting_rate * 100).toFixed(1)}%
+Ghosting Rate: ${((creatorData.global_metrics.ghosting_rate || 0) * 100).toFixed(1)}%
 SNR (signal-to-noise): ${snr.toFixed(1)}%
 ${deadAudienceWarning}
 

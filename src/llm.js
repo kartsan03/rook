@@ -2,7 +2,8 @@ import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 import 'dotenv/config';
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -10,10 +11,10 @@ async function openaiGenerate(prompt) {
     if (!OPENAI_API_KEY) {
         throw new Error('OPENAI_API_KEY is not set, cannot fall back to OpenAI.');
     }
-    console.log('   Falling back to OpenAI (gpt-4o-mini)...');
+    console.log(`   Falling back to OpenAI (${OPENAI_MODEL})...`);
     const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
     const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: OPENAI_MODEL,
         messages: [{ role: 'user', content: prompt }],
     });
     return response.choices[0].message.content;

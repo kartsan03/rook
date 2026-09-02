@@ -20,6 +20,11 @@ if (!fs.existsSync(dataPath)) {
 }
 const rawData = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 
+if (!rawData.global_metrics || !Array.isArray(rawData.videos)) {
+    console.error(`Error: ${dataPath} is not a creator data file (expected global_metrics and videos).`);
+    process.exit(1);
+}
+
 const cleanVideos = rawData.videos.map(video => {
     const seenComments = new Set();
     // Older raw files and some fusion paths may lack these fields.
@@ -40,7 +45,7 @@ const cleanVideos = rawData.videos.map(video => {
 
 let contextText = `Creator: ${rawData.handle} (Niche: ${rawData.global_metrics.niche})\n`;
 contextText += `Platform: ${rawData.platform}\n`;
-contextText += `Engagement metrics: Ghosting Rate: ${(rawData.global_metrics.ghosting_rate * 100).toFixed(1)}%, Heart Rate: ${(rawData.global_metrics.heart_rate * 100).toFixed(1)}%\n\n`;
+contextText += `Engagement metrics: Ghosting Rate: ${((rawData.global_metrics.ghosting_rate || 0) * 100).toFixed(1)}%, Heart Rate: ${((rawData.global_metrics.heart_rate || 0) * 100).toFixed(1)}%\n\n`;
 
 cleanVideos.forEach((v, index) => {
     const platformTag = v.source_platform ? `[${v.source_platform.toUpperCase()}]` : '';

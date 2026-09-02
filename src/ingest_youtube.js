@@ -23,8 +23,25 @@ if (!channelUrl) {
 
 console.log(`Scraping channel: ${channelUrl} (niche: ${targetNiche})`);
 
+// A single-video URL must become a channel URL first: the listing below
+// appends /videos, and the raw filename would contain the watch URL's "?".
+let resolvedUrl = channelUrl;
+if (channelUrl.includes('watch?v=') || channelUrl.includes('youtu.be/')) {
+    console.log(`Resolving channel for video: ${channelUrl}...`);
+    try {
+        const uploaderId = execSync(`yt-dlp -O uploader_id "${channelUrl}"`, { encoding: 'utf8' }).trim();
+        if (!uploaderId || uploaderId === 'NA') throw new Error('yt-dlp returned no uploader');
+        const handle = uploaderId.startsWith('@') ? uploaderId : `@${uploaderId}`;
+        console.log(`   Channel found: ${handle}`);
+        resolvedUrl = `https://www.youtube.com/${handle}`;
+    } catch (e) {
+        console.error(`Error: could not resolve a channel from this video URL: ${e.message}`);
+        process.exit(1);
+    }
+}
+
 console.log('Fetching the latest video list...');
-const getVideosCmd = `yt-dlp --flat-playlist --get-id --playlist-items 1-10 "${channelUrl}/videos"`;
+const getVideosCmd = `yt-dlp --flat-playlist --get-id --playlist-items 1-10 "${resolvedUrl}/videos"`;
 let videoIds = [];
 try {
     const result = execSync(getVideosCmd, { encoding: 'utf8' });
@@ -37,7 +54,7 @@ try {
 
 const creatorData = {
     creator_id: '',
-    handle: channelUrl.split('/').pop().replace('@', ''),
+    handle: resolvedUrl.split('/').pop().replace('@', ''),
     platform: 'youtube',
     global_metrics: {
         subscribers: 0,

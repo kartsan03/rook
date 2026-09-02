@@ -1,6 +1,7 @@
 # rook
 
 [![CI](https://github.com/kartsan03/rook/actions/workflows/ci.yml/badge.svg)](https://github.com/kartsan03/rook/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Rook builds a sales dossier on a content creator from their public footprint. It scrapes a creator's recent YouTube videos and/or Instagram posts (metadata, comments, transcripts), computes engagement metrics in plain code, and uses an LLM to turn the material into two documents: an audience analysis ("The Brief") and a "Master Sales Dossier" with a product offer, direct audience quotes, a revenue estimate, and a ready-to-send outreach message.
 
@@ -13,21 +14,21 @@ One deliberate design choice: the LLM never computes money. Revenue estimates ar
 The pipeline is five small scripts run in sequence, plus a batch runner. No framework, no database; state is JSON files in `data/` and Markdown in `audits/`.
 
 1. `src/ingest_youtube.js` pulls a channel's last 10 videos with `yt-dlp`: views, likes, and up to 200 comments per video (sample size scales with channel size), plus transcripts via `youtube-transcript`. It computes the ghosting rate (share of comments the creator never hearted or replied to) and a bot probability from the view-to-subscriber ratio.
-2. `src/ingest_instagram_apify.js` pulls a profile and its latest posts through two Apify actors (`instagram-profile-scraper`, `instagram-comment-scraper`). If `OPENAI_API_KEY` is set, Reels audio is transcribed with Whisper.
+2. `src/ingest_instagram_apify.js` pulls a profile and its latest posts through two Apify actors (`instagram-profile-scraper`, `instagram-comment-scraper`). If `OPENAI_API_KEY` is set, Reels audio is transcribed via the OpenAI transcription API.
 3. `src/fusion_data.js` (optional) merges the YouTube and Instagram data for one creator into a single profile. It computes a "core audience" per platform (roughly the 10th percentile of views, the floor the creator reaches without algorithmic luck) and cuts the weaker platform's core when the reach gap between platforms exceeds 20x.
 4. `src/process_brief.js` filters out noise comments (emoji-only, very short, thank-yous in several languages, duplicates), then asks Gemini for The Brief: pain freshness, promo fatigue, commercial intent, ghosting, geo tier, creator archetype, top pain points.
 5. `src/process_logic.js` runs the deterministic revenue math (core audience x niche conversion rate x geo-adjusted ticket price, with penalties for low comment signal and likely bot audiences), then three LLM passes (strategist draft, critic, refiner) to produce the final dossier.
 
 `src/batch_analyze.js` runs the whole sequence over a targets file and prints a success/failure summary.
 
-Gemini is the primary model (`gemini-2.0-flash` by default, override with `GEMINI_MODEL`). On rate limits the pipeline waits and retries; when the Gemini quota is exhausted it falls back to OpenAI `gpt-4o-mini` if a key is present.
+Gemini is the primary model (`gemini-3.6-flash` by default, override with `GEMINI_MODEL` — `gemini-3.5-flash-lite` is the cheapest current-generation option). On rate limits the pipeline waits and retries; when the Gemini quota is exhausted it falls back to OpenAI (`gpt-5-mini` by default, override with `OPENAI_MODEL`) if a key is present.
 
 ## Requirements
 
 - Node.js 18 or newer
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) on your PATH (used for YouTube and for extracting Reels audio)
 - A Google Gemini API key (the free tier works; the pipeline waits out its rate limits)
-- Optional: an OpenAI API key (Gemini fallback and Whisper transcription of Reels)
+- Optional: an OpenAI API key (Gemini fallback and Reels transcription)
 - Optional: an Apify token with credits, only for Instagram ingestion
 
 ## Installation
@@ -44,8 +45,9 @@ cp .env.example .env   # then fill in your keys
 | Variable | Required | Purpose |
 |---|---|---|
 | `GEMINI_API_KEY` | yes* | Primary analysis model |
-| `GEMINI_MODEL` | no | Model override, defaults to `gemini-2.0-flash` |
-| `OPENAI_API_KEY` | no* | Fallback model and Whisper for Reels |
+| `GEMINI_MODEL` | no | Model override, defaults to `gemini-3.6-flash` |
+| `OPENAI_API_KEY` | no* | Fallback model and Reels transcription |
+| `OPENAI_MODEL` | no | Fallback model override, defaults to `gpt-5-mini` |
 | `APIFY_TOKEN` | Instagram only | Runs the two Instagram scraper actors |
 
 *At least one of `GEMINI_API_KEY` / `OPENAI_API_KEY` must be set; without a Gemini key every call goes straight to OpenAI.
@@ -111,7 +113,7 @@ Then run the three YouTube commands above against any small channel. A complete 
 ```
 src/
   ingest_youtube.js         YouTube scraping and engagement metrics
-  ingest_instagram_apify.js Instagram scraping via Apify, Whisper transcription
+  ingest_instagram_apify.js Instagram scraping via Apify, Reels transcription
   fusion_data.js            YT+IG merge with core-audience math
   process_brief.js          comment filtering + The Brief (LLM)
   process_logic.js          revenue math (code) + dossier (LLM triad)
