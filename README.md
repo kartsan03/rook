@@ -101,12 +101,13 @@ The `--niche` value selects a row in `config/mock_benchmarks.json` (conversion r
 
 ## Checking your setup
 
+One-command smoke (no API keys required):
+
 ```bash
-npm test          # unit tests for the metrics and filtering logic
-yt-dlp --version
+npm test && yt-dlp --version && node --check src/ingest_youtube.js && node --check src/batch_analyze.js
 ```
 
-Then run the three YouTube commands above against any small channel. A complete run takes a few minutes (comment scraping is the slow part) and should end with a dossier path printed to the console.
+`--help` is not implemented on the ingest/batch CLIs; `node --check` validates they parse. Then run the three YouTube commands above against any small channel. A complete run takes a few minutes (comment scraping is the slow part) and should end with a dossier path printed to the console.
 
 ## Project structure
 
