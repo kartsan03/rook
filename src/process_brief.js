@@ -3,7 +3,8 @@ import path from 'path';
 import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { generate } from './llm.js';
-import { isSignal } from './comment_filter.js';
+import { isSignal, buildQuoteAllowList, formatAllowListForPrompt, formatCommentDate, groundQuotes } from './comment_filter.js';
+import { calculateCore, detectGeoTier, buildComputedMetrics, formatComputedMetricsBlock, scrubUnexpectedDollars } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -27,34 +28,51 @@ if (!rawData.global_metrics || !Array.isArray(rawData.videos)) {
 
 const cleanVideos = rawData.videos.map(video => {
     const seenComments = new Set();
-    // Older raw files and some fusion paths may lack these fields.
     const comments = video.top_comments || [];
     const cleanComments = comments.filter(comment => {
         const text = comment.text.trim();
         if (!isSignal(text)) return false;
-
-        // Deduplicate on the first 50 chars
         const dedupKey = text.substring(0, 50).toLowerCase();
         if (seenComments.has(dedupKey)) return false;
         seenComments.add(dedupKey);
-
         return true;
     });
     return { ...video, top_comments: cleanComments };
 });
 
-let contextText = `Creator: ${rawData.handle} (Niche: ${rawData.global_metrics.niche})\n`;
-contextText += `Platform: ${rawData.platform}\n`;
-contextText += `Engagement metrics: Ghosting Rate: ${((rawData.global_metrics.ghosting_rate || 0) * 100).toFixed(1)}%, Heart Rate: ${((rawData.global_metrics.heart_rate || 0) * 100).toFixed(1)}%\n\n`;
+const allowList = buildQuoteAllowList(rawData.videos);
+const videoViews = rawData.videos.filter(v => v.metrics?.views > 0).map(v => v.metrics.views);
+const coreAudienceViews = rawData.global_metrics.fused_core_audience || calculateCore(videoViews);
+const { reason: geoReason } = detectGeoTier(rawData.videos);
+const totalClean = allowList.length;
+const totalRaw = rawData.global_metrics.total_raw_comments_fetched || 1;
+const snr = (totalClean / totalRaw) * 100;
+const computed = buildComputedMetrics({
+    handle: rawData.handle,
+    platform: rawData.platform,
+    niche: rawData.global_metrics.niche || 'Unknown',
+    ghostingRate: rawData.global_metrics.ghosting_rate,
+    heartRate: rawData.global_metrics.heart_rate,
+    snr,
+    coreAudienceViews,
+    botProbability: rawData.global_metrics.bot_probability || 0.05,
+    geoReason,
+    deadAudienceWarning: rawData.global_metrics.fusion_warning || '',
+});
+const metricsBlock = formatComputedMetricsBlock(computed);
+
+let contextText = metricsBlock + '\n';
+contextText += `QUOTE ALLOW-LIST (numbered; any quote you write MUST be a substring of one of these):\n`;
+contextText += formatAllowListForPrompt(allowList) + '\n\n';
 
 cleanVideos.forEach((v, index) => {
     const platformTag = v.source_platform ? `[${v.source_platform.toUpperCase()}]` : '';
-    contextText += `--- Video ${index + 1}: ${v.title} ${platformTag} (Published: ${(v.published_at || '').substring(0, 10)}) ---\n`;
+    contextText += `--- Video ${index + 1}: ${v.title} ${platformTag} (Published: ${(v.published_at || '').substring(0, 10) || 'date_unknown'}) ---\n`;
     contextText += `Transcript (excerpt): ${v.transcript}\n`;
     contextText += `Filtered comments:\n`;
     v.top_comments.forEach(c => {
         const heartTag = c.has_heart ? '[hearted by creator]' : '';
-        contextText += `- [${(c.date || '').substring(0, 10)}] ${c.text} ${heartTag}\n`;
+        contextText += `- [${formatCommentDate(c.date)}] ${c.text} ${heartTag}\n`;
     });
     contextText += `\n`;
 });
@@ -69,12 +87,16 @@ In that case you MUST:
 1. Compare the audience on both platforms (where it is more active, where the pain points are stronger).
 2. Identify the synergy: e.g. Instagram as the short-form funnel, YouTube as long-form warm-up content.
 
+METRICS: The COMPUTED METRICS block above is code-owned ground truth. Do NOT invent or restate ghosting, SNR, core audience, bot bucket, geo, or rates as free-prose numbers — refer to that block.
+
+QUOTES: When you quote a comment, copy a substring from the QUOTE ALLOW-LIST only. Never invent quotes or dates. Missing dates are "date_unknown".
+
 METRICS YOU MUST ASSESS:
-1. Time-Decay (pain freshness): look at the comment dates.
+1. Time-Decay (pain freshness): look at the comment dates (use date_unknown when listed).
 2. Promo Fatigue & Ownership Check: look for mentions of the creator's own products.
 3. Commercial Intent: split the audience into "free-seekers" and "wallet-ready".
-4. Ghosting Analysis: look at the Ghosting Rate. Above 80%, the audience feels abandoned.
-5. Purchasing Power (geo-economics): determine the audience language and geo tier (Tier 1/2/3).
+4. Ghosting Analysis: use the code-owned Ghosting rate from COMPUTED METRICS.
+5. Purchasing Power (geo-economics): use the code-owned Geo line; expand qualitatively only.
 6. Personality Fit (vibe check): determine the creator's archetype.
 
 Output format (strict Markdown):
@@ -95,11 +117,28 @@ Output format (strict Markdown):
 async function run() {
     console.log(`Analysis layer: building The Brief for @${rawData.handle} (${rawData.platform})...`);
     try {
-        const textResponse = await generate(systemPrompt + '\n\nData context for analysis:\n' + contextText);
+        const { text, provider, model } = await generate(systemPrompt + '\n\nData context for analysis:\n' + contextText);
+        const grounded = groundQuotes(text, allowList);
+        if (grounded.stripped > 0) {
+            console.warn(`   Quote gate: stripped ${grounded.stripped} ungrounded quote(s).`);
+        }
+        // Code-owned metrics must appear in the saved Brief (parity with dossier §4 splice).
+        let briefMd = grounded.text;
+        if (/^#\s+.+/m.test(briefMd)) {
+            briefMd = briefMd.replace(/^(#\s+.+\n)/m, `$1\n${metricsBlock}\n`);
+        } else {
+            briefMd = `${metricsBlock}\n${briefMd}`;
+        }
+        const scrubbed = scrubUnexpectedDollars(briefMd, [metricsBlock]);
+        if (scrubbed.stripped > 0) {
+            console.warn(`   Dollar gate: stripped ${scrubbed.stripped} non-code-owned amount(s).`);
+        }
+        briefMd = scrubbed.text;
+        const footer = `\n\n---\n_LLM pass: provider=${provider} model=${model} temperature=0_\n`;
 
         fs.mkdirSync(path.join(rootDir, 'audits'), { recursive: true });
         const briefPath = path.join(rootDir, 'audits', `the_brief_${rawData.handle}.md`);
-        fs.writeFileSync(briefPath, textResponse);
+        fs.writeFileSync(briefPath, briefMd + footer);
         console.log(`Brief saved to: audits/the_brief_${rawData.handle}.md`);
     } catch (error) {
         console.error('LLM error after retries:', error.message);

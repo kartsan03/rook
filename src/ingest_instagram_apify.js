@@ -87,7 +87,8 @@ async function run() {
                     if (c.ownerUsername === profile.username) totalAuthorReplies++;
                     return {
                         text: c.text,
-                        date: c.timestamp,
+                        // Missing Apify timestamp → null (date_unknown downstream); never invent scrape time.
+                        date: c.timestamp || null,
                         has_heart: c.ownerLiked || false
                     };
                 });

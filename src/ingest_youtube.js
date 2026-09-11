@@ -113,9 +113,9 @@ for (let i = 0; i < videoIds.length; i++) {
 
                 if (c.text && c.text.trim().length > 0) {
                     const parsed = c.timestamp ? new Date(c.timestamp * 1000) : null;
-                    // A missing timestamp must not become an Invalid Date: it serializes to
-                    // null and crashes process_brief.js when formatting comment dates.
-                    const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : new Date().toISOString();
+                    // Missing timestamp → null (rendered as date_unknown downstream).
+                    // Never invent scrape-time new Date() as the comment date.
+                    const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : null;
                     topComments.push({
                         text: c.text,
                         date: iso,
@@ -138,7 +138,7 @@ for (let i = 0; i < videoIds.length; i++) {
         creatorData.videos.push({
             video_id: vid,
             title: meta.title,
-            published_at: meta.upload_date ? `${meta.upload_date.substring(0, 4)}-${meta.upload_date.substring(4, 6)}-${meta.upload_date.substring(6, 8)}T00:00:00Z` : new Date().toISOString(),
+            published_at: meta.upload_date ? `${meta.upload_date.substring(0, 4)}-${meta.upload_date.substring(4, 6)}-${meta.upload_date.substring(6, 8)}T00:00:00Z` : null,
             metrics: { views: meta.view_count || 0, likes: meta.like_count || 0, comments_count: meta.comment_count || 0 },
             transcript: transcriptText,
             top_comments: topComments

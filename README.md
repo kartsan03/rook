@@ -21,7 +21,7 @@ The pipeline is five small scripts run in sequence, plus a batch runner. No fram
 
 `src/batch_analyze.js` runs the whole sequence over a targets file and prints a success/failure summary.
 
-Gemini is the primary model (`gemini-3.6-flash` by default, override with `GEMINI_MODEL` — `gemini-3.5-flash-lite` is the cheapest current-generation option). On rate limits the pipeline waits and retries; when the Gemini quota is exhausted it falls back to OpenAI (`gpt-5-mini` by default, override with `OPENAI_MODEL`) if a key is present.
+Gemini is the primary model (`gemini-3.6-flash` by default, override with `GEMINI_MODEL` — `gemini-3.5-flash-lite` is the cheapest current-generation option). Calls use `temperature: 0`. On rate limits the pipeline waits and retries; when the Gemini quota is exhausted mid-run it **fails loud** (banner + error) unless `ROOK_ALLOW_LLM_FALLBACK=1`, in which case it falls back to OpenAI (`gpt-5-mini` by default, override with `OPENAI_MODEL`) if a key is present. With no Gemini key, OpenAI is the primary provider (not a mid-run fallback).
 
 ## Requirements
 
@@ -49,6 +49,7 @@ cp .env.example .env   # then fill in your keys
 | `OPENAI_API_KEY` | no* | Fallback model and Reels transcription |
 | `OPENAI_MODEL` | no | Fallback model override, defaults to `gpt-5-mini` |
 | `APIFY_TOKEN` | Instagram only | Runs the two Instagram scraper actors |
+| `ROOK_ALLOW_LLM_FALLBACK` | no | Set to `1` to allow mid-run Gemini→OpenAI fallback (default: fail-loud) |
 
 *At least one of `GEMINI_API_KEY` / `OPENAI_API_KEY` must be set; without a Gemini key every call goes straight to OpenAI.
 
@@ -150,8 +151,8 @@ This tool collects public data about real people and generates documents about t
 ## Troubleshooting
 
 - `yt-dlp: command not found` (or not recognized): install yt-dlp and make sure it is on the PATH of the shell running Node.
-- Long pauses with `Rate limit hit, waiting Ns`: normal on the Gemini free tier. The pipeline resumes on its own; set `OPENAI_API_KEY` if you want the fallback instead of the wait.
-- `Gemini daily quota exhausted`: the free daily budget is gone. Wait for the reset or rely on the OpenAI fallback.
+- Long pauses with `Rate limit hit, waiting Ns`: normal on the Gemini free tier. The pipeline resumes on its own after backoff.
+- `Gemini daily quota exhausted` / mid-run OpenAI fallback refused: default is **fail-loud** (banner + throw). Set `ROOK_ALLOW_LLM_FALLBACK=1` *and* `OPENAI_API_KEY` to allow Gemini→OpenAI mid-run fallback. With no Gemini key, OpenAI is the primary provider (not a mid-run fallback).
 - Apify errors mentioning credits or billing: your Apify account is out of credits. YouTube-only targets still work.
 - `Health check failed: ... no comments with signal`: the creator's comments were all noise (emoji, one-word thanks). No dossier is produced for them; that is the intended behavior.
 - Empty or tiny comment sets on YouTube: some channels disable comments or get very few; the brief will be thin.

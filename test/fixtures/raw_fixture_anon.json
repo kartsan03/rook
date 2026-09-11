@@ -1,0 +1,51 @@
+{
+  "creator_id": "UC_ANON_FIXTURE",
+  "handle": "AnonCreator",
+  "platform": "youtube",
+  "global_metrics": {
+    "subscribers": 120000,
+    "avg_views_last_10_videos": 25000,
+    "total_raw_comments_fetched": 40,
+    "ghosting_rate": 0.75,
+    "heart_rate": 0.1,
+    "niche": "Fitness & Health",
+    "bot_probability": 0.05
+  },
+  "videos": [
+    {
+      "video_id": "vid001",
+      "title": "Form cues for the hinge",
+      "published_at": "2026-06-01T00:00:00Z",
+      "metrics": { "views": 22000, "likes": 900, "comments_count": 120 },
+      "transcript": "Today we cover the hinge pattern and common mistakes.",
+      "top_comments": [
+        { "text": "Love the videos but I never know what to do on the days you don't cover", "date": "2026-06-14T12:00:00Z", "has_heart": false },
+        { "text": "Do you have a program I can just buy? I don't want to keep guessing my splits", "date": "2026-06-14T15:00:00Z", "has_heart": true },
+        { "text": "thanks", "date": "2026-06-14T16:00:00Z", "has_heart": false },
+        { "text": "🔥🔥🔥", "date": null, "has_heart": false }
+      ]
+    },
+    {
+      "video_id": "vid002",
+      "title": "Diet matters more",
+      "published_at": "2026-05-20T00:00:00Z",
+      "metrics": { "views": 18400, "likes": 700, "comments_count": 80 },
+      "transcript": "Diet matters more than the perfect program.",
+      "top_comments": [
+        { "text": "You keep saying diet matters more but there's no video on what you actually eat", "date": "2026-05-30T10:00:00Z", "has_heart": false },
+        { "text": "I can't tell if my hinge looks like yours, wish I could send you a clip", "date": "2026-04-19T08:00:00Z", "has_heart": false },
+        { "text": "cool stuff", "date": null, "has_heart": false }
+      ]
+    },
+    {
+      "video_id": "vid003",
+      "title": "Warm-up routine",
+      "published_at": "2026-04-10T00:00:00Z",
+      "metrics": { "views": 31000, "likes": 1100, "comments_count": 90 },
+      "transcript": "A simple warm-up before heavy sets.",
+      "top_comments": [
+        { "text": "Please make a follow-along warm-up video for busy mornings at home", "date": "2026-04-12T09:00:00Z", "has_heart": false }
+      ]
+    }
+  ]
+}
