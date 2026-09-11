@@ -151,8 +151,8 @@ This tool collects public data about real people and generates documents about t
 ## Troubleshooting
 
 - `yt-dlp: command not found` (or not recognized): install yt-dlp and make sure it is on the PATH of the shell running Node.
-- Long pauses with `Rate limit hit, waiting Ns`: normal on the Gemini free tier. The pipeline resumes on its own; set `OPENAI_API_KEY` if you want the fallback instead of the wait.
-- `Gemini daily quota exhausted`: the free daily budget is gone. Wait for the reset or rely on the OpenAI fallback.
+- Long pauses with `Rate limit hit, waiting Ns`: normal on the Gemini free tier. The pipeline resumes on its own after backoff.
+- `Gemini daily quota exhausted` / mid-run OpenAI fallback refused: default is **fail-loud** (banner + throw). Set `ROOK_ALLOW_LLM_FALLBACK=1` *and* `OPENAI_API_KEY` to allow Gemini→OpenAI mid-run fallback. With no Gemini key, OpenAI is the primary provider (not a mid-run fallback).
 - Apify errors mentioning credits or billing: your Apify account is out of credits. YouTube-only targets still work.
 - `Health check failed: ... no comments with signal`: the creator's comments were all noise (emoji, one-word thanks). No dossier is produced for them; that is the intended behavior.
 - Empty or tiny comment sets on YouTube: some channels disable comments or get very few; the brief will be thin.

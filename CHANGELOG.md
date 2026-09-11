@@ -2,7 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- `isGrounded` is one-direction only (`allowText.includes(quote)`); padded hallucinations no longer pass via reverse/prefix hatch.
+- COMPUTED METRICS block is spliced into saved Brief/Dossier markdown after quote grounding (not prompt-only).
+- Unexpected `$` amounts outside code-owned §4 / metrics are scrubbed from saved markdown.
+- README Troubleshooting: fail-loud mid-run fallback; document `ROOK_ALLOW_LLM_FALLBACK=1`.
+- Missing YouTube `published_at` is `null` / `date_unknown`, not scrape-time now.
+
 ### Added
+
 
 - Quote allow-list + post-validation gate: LLM quotes must be substrings of filtered comments (`comment_filter.js`).
 - Code-owned COMPUTED METRICS block and §4 financial transparency line (`core × CR × price × mult = $`); mock benchmarks labeled illustrative.

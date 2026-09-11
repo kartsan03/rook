@@ -148,3 +148,29 @@ export function buildFinancialBlock({
 *(Note: the niche's base conversion rate was adjusted by a ${crMultiplier.toFixed(2)}x factor. Reasons: ${penaltyReasons.length > 0 ? penaltyReasons.join(', ') : 'no penalties'}.)*
 `;
 }
+
+/**
+ * Post-validate markdown: keep only $ amounts that appear in code-owned blocks
+ * (COMPUTED METRICS / §4 financial). Unexpected amounts are stripped.
+ * Returns { text, stripped, amounts }.
+ */
+export function scrubUnexpectedDollars(markdown, allowedBlocks = []) {
+    const allowed = new Set();
+    const amountRe = /\$\s?[\d,]+(?:\.\d+)?/g;
+    for (const block of allowedBlocks) {
+        if (!block) continue;
+        for (const m of String(block).matchAll(amountRe)) {
+            allowed.add(m[0].replace(/\s+/g, ''));
+        }
+    }
+    const amounts = [];
+    const stripped = [];
+    const text = String(markdown || '').replace(amountRe, (raw) => {
+        const norm = raw.replace(/\s+/g, '');
+        amounts.push(norm);
+        if (allowed.has(norm)) return raw;
+        stripped.push(norm);
+        return '[amount removed: not code-owned]';
+    });
+    return { text, stripped: stripped.length, amounts: stripped };
+}

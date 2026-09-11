@@ -4,7 +4,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { generate } from './llm.js';
 import { isSignal, buildQuoteAllowList, formatAllowListForPrompt, formatCommentDate, groundQuotes } from './comment_filter.js';
-import { calculateCore, detectGeoTier, buildComputedMetrics, formatComputedMetricsBlock } from './metrics.js';
+import { calculateCore, detectGeoTier, buildComputedMetrics, formatComputedMetricsBlock, scrubUnexpectedDollars } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -122,11 +122,23 @@ async function run() {
         if (grounded.stripped > 0) {
             console.warn(`   Quote gate: stripped ${grounded.stripped} ungrounded quote(s).`);
         }
+        // Code-owned metrics must appear in the saved Brief (parity with dossier §4 splice).
+        let briefMd = grounded.text;
+        if (/^#\s+.+/m.test(briefMd)) {
+            briefMd = briefMd.replace(/^(#\s+.+\n)/m, `$1\n${metricsBlock}\n`);
+        } else {
+            briefMd = `${metricsBlock}\n${briefMd}`;
+        }
+        const scrubbed = scrubUnexpectedDollars(briefMd, [metricsBlock]);
+        if (scrubbed.stripped > 0) {
+            console.warn(`   Dollar gate: stripped ${scrubbed.stripped} non-code-owned amount(s).`);
+        }
+        briefMd = scrubbed.text;
         const footer = `\n\n---\n_LLM pass: provider=${provider} model=${model} temperature=0_\n`;
 
         fs.mkdirSync(path.join(rootDir, 'audits'), { recursive: true });
         const briefPath = path.join(rootDir, 'audits', `the_brief_${rawData.handle}.md`);
-        fs.writeFileSync(briefPath, grounded.text + footer);
+        fs.writeFileSync(briefPath, briefMd + footer);
         console.log(`Brief saved to: audits/the_brief_${rawData.handle}.md`);
     } catch (error) {
         console.error('LLM error after retries:', error.message);

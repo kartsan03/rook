@@ -138,7 +138,7 @@ for (let i = 0; i < videoIds.length; i++) {
         creatorData.videos.push({
             video_id: vid,
             title: meta.title,
-            published_at: meta.upload_date ? `${meta.upload_date.substring(0, 4)}-${meta.upload_date.substring(4, 6)}-${meta.upload_date.substring(6, 8)}T00:00:00Z` : new Date().toISOString(),
+            published_at: meta.upload_date ? `${meta.upload_date.substring(0, 4)}-${meta.upload_date.substring(4, 6)}-${meta.upload_date.substring(6, 8)}T00:00:00Z` : null,
             metrics: { views: meta.view_count || 0, likes: meta.like_count || 0, comments_count: meta.comment_count || 0 },
             transcript: transcriptText,
             top_comments: topComments

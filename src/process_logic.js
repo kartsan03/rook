@@ -10,6 +10,7 @@ import {
     estimateRevenue,
     buildComputedMetrics,
     formatComputedMetricsBlock,
+    scrubUnexpectedDollars,
     buildFinancialBlock,
 } from './metrics.js';
 
@@ -215,11 +216,26 @@ async function run() {
         }
         finalBrief = grounded.text;
 
+        // Splice code-owned COMPUTED METRICS into saved dossier (parity with §4).
+        if (finalBrief.includes('## 1.')) {
+            finalBrief = finalBrief.replace('## 1.', `${metricsBlock}\n\n## 1.`);
+        } else if (/^#\s+.+/m.test(finalBrief)) {
+            finalBrief = finalBrief.replace(/^(#\s+.+\n)/m, `$1\n${metricsBlock}\n`);
+        } else {
+            finalBrief = `${metricsBlock}\n\n${finalBrief}`;
+        }
+
         if (finalBrief.includes('## 5.')) {
             finalBrief = finalBrief.replace('## 5.', `${financialBlock}\n\n## 5.`);
         } else {
             finalBrief += `\n\n${financialBlock}`;
         }
+
+        const scrubbed = scrubUnexpectedDollars(finalBrief, [metricsBlock, financialBlock]);
+        if (scrubbed.stripped > 0) {
+            console.warn(`   Dollar gate: stripped ${scrubbed.stripped} non-code-owned amount(s).`);
+        }
+        finalBrief = scrubbed.text;
         finalBrief += formatPassFooter(passes);
 
         const finalPath = path.join(rootDir, 'audits', `investment_brief_${runId}.md`);

@@ -66,8 +66,13 @@ export function extractQuotedSpans(markdown) {
 }
 
 function isGrounded(quote, allowList) {
-    const q = quote.toLowerCase();
-    return allowList.some(c => c.text.toLowerCase().includes(q) || q.includes(c.text.toLowerCase().substring(0, Math.min(40, c.text.length))));
+    // One-direction only: allow-list text must contain the quote (optional whitespace normalize).
+    // Bidirectional / prefix-40 reverse hatch rejected padded hallucinations.
+    const q = quote.toLowerCase().replace(/\s+/g, ' ').trim();
+    return allowList.some(c => {
+        const allow = c.text.toLowerCase().replace(/\s+/g, ' ').trim();
+        return allow.includes(q);
+    });
 }
 
 /**

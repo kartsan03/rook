@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateRevenue, buildFinancialBlock, botBucket, buildComputedMetrics } from '../src/metrics.js';
+import { estimateRevenue, buildFinancialBlock, botBucket, buildComputedMetrics, formatComputedMetricsBlock, scrubUnexpectedDollars } from '../src/metrics.js';
 
 const benchmark = {
     average_ticket_price_usd: 100,
@@ -39,4 +39,38 @@ test('buildComputedMetrics exposes ghosting and SNR', () => {
     assert.equal(m.ghosting_pct, 75);
     assert.equal(m.snr_pct, 12.5);
     assert.equal(m.core_audience, 18400);
+});
+
+test('scrubUnexpectedDollars: keeps code-owned §4 dollars, strips invented', () => {
+    const fin = buildFinancialBlock({
+        coreAudienceViews: 22000,
+        basePrice: 150,
+        geoReason: 'Global / mixed',
+        revConservative: 9900,
+        revModerate: 33000,
+        crMultiplier: 1,
+        penaltyReasons: [],
+        moderateCr: 0.01,
+        niche: 'Fitness & Health',
+    });
+    const metrics = formatComputedMetricsBlock({
+        handle: 'anon',
+        platform: 'youtube',
+        niche: 'Fitness & Health',
+        ghosting_pct: 75,
+        heart_pct: 10,
+        snr_pct: 12.5,
+        core_audience: 22000,
+        bot_probability: 0.05,
+        bot_bucket: 'low (<40%)',
+        geo_reason: 'Global / mixed',
+        dead_audience_warning: '',
+    });
+    const md = '## 1\nGhosting invented money: $99,999\n' + fin + '\nPitch: miss $33,000 and also $12\n';
+    const { text, stripped } = scrubUnexpectedDollars(md, [metrics, fin]);
+    assert.ok(stripped >= 1);
+    assert.match(text, /\$33,000/);
+    assert.match(text, /\$150/);
+    assert.doesNotMatch(text, /\$99,999/);
+    assert.match(text, /amount removed: not code-owned/);
 });

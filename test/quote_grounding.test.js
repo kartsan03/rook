@@ -51,3 +51,20 @@ test('extractQuotedSpans finds curly quotes too', () => {
     const spans = extractQuotedSpans('Said “hello there friend” and "another long enough quote here"');
     assert.equal(spans.length, 2);
 });
+
+test('groundQuotes: padded hallucination (allow-prefix + invention) strips', () => {
+    const allow = buildQuoteAllowList([{
+        top_comments: [
+            { text: 'Do you have a program I can just buy? I need structure', date: '2026-06-14T00:00:00Z' },
+        ],
+    }]);
+    // Reverse/prefix hatch would wrongly accept this; one-direction must reject.
+    const md = `*Quote:* "Do you have a program I can just buy? I need structure AND also your secret NFT drop"\n`;
+    const { text, stripped, ungrounded } = groundQuotes(md, allow);
+    assert.equal(stripped, 1);
+    assert.equal(ungrounded.length, 1);
+    assert.match(ungrounded[0], /secret NFT drop/);
+    assert.doesNotMatch(text, /secret NFT drop/);
+    // Quote:* line path strips the whole bullet (no placeholder left).
+    assert.ok(!text.includes('NFT'));
+});
