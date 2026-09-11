@@ -1,6 +1,6 @@
 {
   "name": "rook",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Creator dossier pipeline: scrape a YouTube or Instagram creator's recent content, score audience engagement, and generate a sales dossier with revenue estimates computed in code.",
   "keywords": [
     "youtube",
