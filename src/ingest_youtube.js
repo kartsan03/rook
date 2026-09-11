@@ -113,9 +113,9 @@ for (let i = 0; i < videoIds.length; i++) {
 
                 if (c.text && c.text.trim().length > 0) {
                     const parsed = c.timestamp ? new Date(c.timestamp * 1000) : null;
-                    // A missing timestamp must not become an Invalid Date: it serializes to
-                    // null and crashes process_brief.js when formatting comment dates.
-                    const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : new Date().toISOString();
+                    // Missing timestamp → null (rendered as date_unknown downstream).
+                    // Never invent scrape-time new Date() as the comment date.
+                    const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : null;
                     topComments.push({
                         text: c.text,
                         date: iso,

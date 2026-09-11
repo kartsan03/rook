@@ -21,7 +21,7 @@ The pipeline is five small scripts run in sequence, plus a batch runner. No fram
 
 `src/batch_analyze.js` runs the whole sequence over a targets file and prints a success/failure summary.
 
-Gemini is the primary model (`gemini-3.6-flash` by default, override with `GEMINI_MODEL` — `gemini-3.5-flash-lite` is the cheapest current-generation option). On rate limits the pipeline waits and retries; when the Gemini quota is exhausted it falls back to OpenAI (`gpt-5-mini` by default, override with `OPENAI_MODEL`) if a key is present.
+Gemini is the primary model (`gemini-3.6-flash` by default, override with `GEMINI_MODEL` — `gemini-3.5-flash-lite` is the cheapest current-generation option). Calls use `temperature: 0`. On rate limits the pipeline waits and retries; when the Gemini quota is exhausted mid-run it **fails loud** (banner + error) unless `ROOK_ALLOW_LLM_FALLBACK=1`, in which case it falls back to OpenAI (`gpt-5-mini` by default, override with `OPENAI_MODEL`) if a key is present. With no Gemini key, OpenAI is the primary provider (not a mid-run fallback).
 
 ## Requirements
 
@@ -49,6 +49,7 @@ cp .env.example .env   # then fill in your keys
 | `OPENAI_API_KEY` | no* | Fallback model and Reels transcription |
 | `OPENAI_MODEL` | no | Fallback model override, defaults to `gpt-5-mini` |
 | `APIFY_TOKEN` | Instagram only | Runs the two Instagram scraper actors |
+| `ROOK_ALLOW_LLM_FALLBACK` | no | Set to `1` to allow mid-run Gemini→OpenAI fallback (default: fail-loud) |
 
 *At least one of `GEMINI_API_KEY` / `OPENAI_API_KEY` must be set; without a Gemini key every call goes straight to OpenAI.
 

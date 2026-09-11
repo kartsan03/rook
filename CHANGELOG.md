@@ -1,7 +1,20 @@
 # Changelog
 
-## 1.1.0 - 2026-09-02
+## Unreleased
 
+### Added
+
+- Quote allow-list + post-validation gate: LLM quotes must be substrings of filtered comments (`comment_filter.js`).
+- Code-owned COMPUTED METRICS block and §4 financial transparency line (`core × CR × price × mult = $`); mock benchmarks labeled illustrative.
+- Fixture replay tests (`test/fixtures/raw_fixture_anon.json`) asserting §4 dollars, core/geo/SNR, and quote gate without live scrape/API keys.
+- `temperature: 0` on Gemini and OpenAI; per-pass provider/model footer on briefs/dossiers.
+
+### Changed
+
+- Mid-run Gemini→OpenAI fallback is fail-loud (banner + throw) unless `ROOK_ALLOW_LLM_FALLBACK=1`. Straight OpenAI when no Gemini key is unchanged.
+- Missing comment timestamps are `null` / `date_unknown` (YouTube and Instagram ingest); scrape-time `new Date()` is never used as a comment date.
+
+## 1.1.0 - 2026-09-02
 ### Changed
 
 - Default Gemini model is now `gemini-3.6-flash`: the previous default `gemini-2.0-flash` was shut down by Google. Override with `GEMINI_MODEL`; `gemini-3.5-flash-lite` is the cheapest current-generation option.
