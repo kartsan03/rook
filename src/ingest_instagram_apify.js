@@ -5,6 +5,7 @@ import path from 'path';
 import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
+import { measureEngagement } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -56,7 +57,7 @@ async function run() {
                 ghosting_rate: 0,
                 heart_rate: 0,
                 niche: targetNiche,
-                bot_probability: 0.05
+                bot_probability: null
             },
             videos: []
         };
@@ -76,22 +77,27 @@ async function run() {
         let totalViews = 0;
         let videoCount = 0;
         let totalHearts = 0;
-        let totalAuthorReplies = 0;
+        let totalAcknowledged = 0;
+        if (!posts.length) throw new Error('No posts fetched; keeping existing data files untouched.');
 
         for (const post of posts) {
             const shortCode = post.shortCode;
-            const postComments = allComments
+            const isCreator = c => !!c.ownerUsername && c.ownerUsername.toLowerCase() === profile.username.toLowerCase();
+            const engagement = measureEngagement(allComments
                 .filter(c => c.postUrl && c.postUrl.includes(shortCode))
-                .map(c => {
-                    if (c.ownerLiked) totalHearts++;
-                    if (c.ownerUsername === profile.username) totalAuthorReplies++;
-                    return {
-                        text: c.text,
-                        // Missing Apify timestamp → null (date_unknown downstream); never invent scrape time.
-                        date: c.timestamp || null,
-                        has_heart: c.ownerLiked || false
-                    };
-                });
+                .map(c => ({
+                    id: c.id, text: c.text, date: c.timestamp || null,
+                    parent_id: c.parentCommentId,
+                    is_creator: isCreator(c),
+                    has_heart: !!c.ownerLiked,
+                    has_creator_reply: (c.replies || []).some(isCreator),
+                })));
+            totalHearts += engagement.hearted;
+            totalAcknowledged += engagement.acknowledged;
+            const postComments = engagement.audience.map(c => ({
+                text: c.text, date: c.date, has_heart: c.has_heart,
+            }));
+            const views = Number.isFinite(post.videoPlayCount) && post.videoPlayCount >= 0 ? post.videoPlayCount : null;
 
             let transcriptText = 'Transcript unavailable.';
 
@@ -118,8 +124,8 @@ async function run() {
                 title: post.caption || 'No caption',
                 published_at: post.timestamp,
                 metrics: {
-                    // Photo posts have no play count; likes x10 is a rough reach proxy.
-                    views: post.videoPlayCount || (post.likesCount ? post.likesCount * 10 : 0),
+                    views,
+                    views_source: views == null ? 'unknown' : 'videoPlayCount',
                     likes: post.likesCount,
                     comments_count: post.commentsCount
                 },
@@ -127,21 +133,18 @@ async function run() {
                 top_comments: postComments
             });
 
-            totalViews += post.videoPlayCount || (post.likesCount ? post.likesCount * 10 : 0);
-            videoCount++;
+            if (views != null) {
+                totalViews += views;
+                videoCount++;
+            }
             creatorData.global_metrics.total_raw_comments_fetched += postComments.length;
         }
 
         // Ghosting = share of comments the creator neither hearted nor replied to.
-        if (creatorData.global_metrics.total_raw_comments_fetched > 0) {
-            const engagementRate = (totalHearts + totalAuthorReplies) / creatorData.global_metrics.total_raw_comments_fetched;
-            creatorData.global_metrics.heart_rate = totalHearts / creatorData.global_metrics.total_raw_comments_fetched;
-            creatorData.global_metrics.ghosting_rate = 1 - Math.min(1, engagementRate);
-        }
-
-        if (videoCount > 0) {
-            creatorData.global_metrics.avg_views_last_10_videos = Math.floor(totalViews / videoCount);
-        }
+        const audienceCount = creatorData.global_metrics.total_raw_comments_fetched;
+        creatorData.global_metrics.heart_rate = audienceCount ? totalHearts / audienceCount : null;
+        creatorData.global_metrics.ghosting_rate = audienceCount ? 1 - totalAcknowledged / audienceCount : null;
+        creatorData.global_metrics.avg_views_last_10_videos = videoCount ? Math.floor(totalViews / videoCount) : null;
 
         fs.mkdirSync(path.join(rootDir, 'data'), { recursive: true });
         const historyPath = path.join(rootDir, 'data', `raw_ig_${username}.json`);
@@ -149,7 +152,7 @@ async function run() {
         fs.writeFileSync(path.join(rootDir, 'data', 'latest_creator_data.json'), JSON.stringify(creatorData, null, 2));
 
         console.log(`\n[4/4] Ingestion done. Saved to data/raw_ig_${username}.json`);
-        console.log(`Ghosting Rate: ${(creatorData.global_metrics.ghosting_rate * 100).toFixed(1)}%`);
+        console.log(`Ghosting Rate: ${creatorData.global_metrics.ghosting_rate == null ? 'unknown' : `${(creatorData.global_metrics.ghosting_rate * 100).toFixed(1)}%`}`);
 
     } catch (error) {
         console.error('Error:', error.message);

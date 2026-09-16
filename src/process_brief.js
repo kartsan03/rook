@@ -3,8 +3,9 @@ import path from 'path';
 import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { generate } from './llm.js';
+import { briefSourceMarker, requireGeneratedText } from './artifact_guard.js';
 import { isSignal, buildQuoteAllowList, formatAllowListForPrompt, formatCommentDate, groundQuotes } from './comment_filter.js';
-import { calculateCore, detectGeoTier, buildComputedMetrics, formatComputedMetricsBlock, scrubUnexpectedDollars } from './metrics.js';
+import { measuredCore, detectGeoTier, buildComputedMetrics, formatComputedMetricsBlock, scrubUnexpectedDollars } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -41,8 +42,13 @@ const cleanVideos = rawData.videos.map(video => {
 });
 
 const allowList = buildQuoteAllowList(rawData.videos);
-const videoViews = rawData.videos.filter(v => v.metrics?.views > 0).map(v => v.metrics.views);
-const coreAudienceViews = rawData.global_metrics.fused_core_audience || calculateCore(videoViews);
+if (!allowList.length) {
+    console.log(`Health check failed: @${rawData.handle} has no comments with signal. Skipping Brief.`);
+    process.exit(2);
+}
+const coreAudienceViews = rawData.platform === 'multi'
+    ? rawData.global_metrics.fused_core_audience ?? null
+    : measuredCore(rawData.videos, rawData.platform);
 const { reason: geoReason } = detectGeoTier(rawData.videos);
 const totalClean = allowList.length;
 const totalRaw = rawData.global_metrics.total_raw_comments_fetched || 1;
@@ -55,7 +61,7 @@ const computed = buildComputedMetrics({
     heartRate: rawData.global_metrics.heart_rate,
     snr,
     coreAudienceViews,
-    botProbability: rawData.global_metrics.bot_probability || 0.05,
+    botProbability: rawData.platform === 'instagram' ? null : rawData.global_metrics.bot_probability ?? null,
     geoReason,
     deadAudienceWarning: rawData.global_metrics.fusion_warning || '',
 });
@@ -118,7 +124,7 @@ async function run() {
     console.log(`Analysis layer: building The Brief for @${rawData.handle} (${rawData.platform})...`);
     try {
         const { text, provider, model } = await generate(systemPrompt + '\n\nData context for analysis:\n' + contextText);
-        const grounded = groundQuotes(text, allowList);
+        const grounded = groundQuotes(requireGeneratedText(text), allowList);
         if (grounded.stripped > 0) {
             console.warn(`   Quote gate: stripped ${grounded.stripped} ungrounded quote(s).`);
         }
@@ -138,7 +144,7 @@ async function run() {
 
         fs.mkdirSync(path.join(rootDir, 'audits'), { recursive: true });
         const briefPath = path.join(rootDir, 'audits', `the_brief_${rawData.handle}.md`);
-        fs.writeFileSync(briefPath, briefMd + footer);
+        fs.writeFileSync(briefPath, briefMd + footer + '\n' + briefSourceMarker(rawData) + '\n');
         console.log(`Brief saved to: audits/the_brief_${rawData.handle}.md`);
     } catch (error) {
         console.error('LLM error after retries:', error.message);

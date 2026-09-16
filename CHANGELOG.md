@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- Briefs are bound to their input via a SHA-256 fingerprint; stale/legacy Briefs are rejected by the dossier step. Empty LLM output fails before publishing an artifact.
+- Ghosting counts the union of hearts and matched replies per audience comment, excludes creator messages and duplicate IDs, and reports empty samples as unknown. Fusion pools rates by sampled comment counts.
+- Grounded quotes receive source-date annotations; inline ISO/English month-first date labels and adjacent ISO-date labels no longer override the source. Invalid or ambiguous source dates become `date_unknown`.
+- Dollar validation treats magnitude suffixes as part of the amount: an allowed `$100` no longer permits `$100 million` or `$100M`.
+- No-signal analysis exits 2; batch distinguishes SKIPPED from SUCCESS and exits nonzero on skips or failures.
+- Instagram uses measured `videoPlayCount` only, preserving measured zero versus unknown. Likes-based and legacy unlabelled proxy views are excluded from core/fusion; missing measured reach produces unavailable revenue. Instagram/combined bot probability is unknown rather than a fabricated low-risk score. Offline regressions cover these paths.
 - Fusion dead-audience penalty now cuts the **weaker** platform's core. It used to cut the stronger side (the opposite of the documented rule), deflating fused core and revenue estimates for every imbalanced creator (~6.5x in the audit example). Pure logic moved to `applyFusionPenalty` in `src/metrics.js` with unit tests (`test/fusion.test.js`); fusion_data.js keeps the same CLI behavior.
 - `ingest_youtube.js` exits with an error and leaves existing `data/raw_*.json` / `data/latest_creator_data.json` untouched when every video fetch fails. Before, a fully failed run still wrote `videos: []` over both files with exit 0.
 - `ingest_youtube.js` retries channel sizing on a later video if the first attempt failed. Previously one failed sizing call froze `subscribers: 0` and `creator_id: ''` for the whole run, breaking the bot gate and creator-reply detection.

@@ -27,6 +27,56 @@ export function applyFusionPenalty(ytCore, igCore, ytAvgViews, igAvgViews) {
     return { ytCore, igCore, fusionWarning };
 }
 
+// Audience comments are the denominator. Multiple replies and a heart on the
+// same comment count as one acknowledgement; creator messages are not demand.
+export function measureEngagement(comments) {
+    const repliedTo = new Set(comments.filter(c => c.is_creator && c.parent_id).map(c => String(c.parent_id)));
+    const seen = new Set();
+    const audience = comments.filter(c => {
+        if (c.is_creator || !c.text?.trim()) return false;
+        if (c.id != null) {
+            if (seen.has(String(c.id))) return false;
+            seen.add(String(c.id));
+        }
+        return true;
+    });
+    const hearted = audience.filter(c => c.has_heart).length;
+    const acknowledged = audience.filter(c => c.has_heart || c.has_creator_reply ||
+        (c.id != null && repliedTo.has(String(c.id)))).length;
+    return {
+        audience, hearted, acknowledged,
+        heart_rate: audience.length ? hearted / audience.length : null,
+        ghosting_rate: audience.length ? 1 - acknowledged / audience.length : null,
+    };
+}
+
+// Pool sampled audience comments rather than averaging platform percentages.
+export function pooledEngagement(metrics, key) {
+    let total = 0;
+    let weighted = 0;
+    for (const m of metrics) {
+        const count = m.total_raw_comments_fetched || 0;
+        if (count > 0 && m[key] == null) return null;
+        if (count > 0) {
+            total += count;
+            weighted += count * m[key];
+        }
+    }
+    return total ? weighted / total : null;
+}
+
+// Legacy Instagram views may be likes×10: require explicit measured provenance.
+export function measuredViews(video, platform) {
+    if ((video.source_platform || platform) === 'instagram' && video.metrics?.views_source !== 'videoPlayCount') return null;
+    const views = video.metrics?.views;
+    return Number.isFinite(views) && views >= 0 ? views : null;
+}
+
+export function measuredCore(videos, platform) {
+    const views = videos.map(v => measuredViews(v, platform)).filter(v => v !== null);
+    return views.length ? calculateCore(views) : null;
+}
+
 // Geo detection: if most comment text is Cyrillic or Devanagari script,
 // the audience is priced as Tier 3.
 export function detectGeoTier(videos) {
@@ -52,6 +102,10 @@ export function detectGeoTier(videos) {
 // Revenue estimate. A noisy comment section (SNR < 5%) and a likely bot or
 // decayed audience cut the niche conversion rate; Tier 3 cuts the price.
 export function estimateRevenue({ coreViews, benchmark, snr, botProbability, isTier3 }) {
+    if (coreViews == null) {
+        return { basePrice: null, crMultiplier: 1, penaltyReasons: [], moderateCr: null,
+            conservativeCr: null, conservative: null, moderate: null };
+    }
     let basePrice = benchmark.average_ticket_price_usd;
     if (isTier3) basePrice = Math.floor(basePrice * 0.3);
 
@@ -83,7 +137,8 @@ export function estimateRevenue({ coreViews, benchmark, snr, botProbability, isT
 
 /** Bot bucket label for code-owned metrics blocks (LLM must not invent this). */
 export function botBucket(botProbability) {
-    const p = botProbability || 0;
+    if (botProbability == null) return 'unknown';
+    const p = botProbability;
     if (p >= 0.8) return 'high (≥80%)';
     if (p >= 0.4) return 'elevated (≥40%)';
     return 'low (<40%)';
@@ -109,10 +164,10 @@ export function buildComputedMetrics({
         handle,
         platform,
         niche,
-        ghosting_pct: Number(((ghostingRate || 0) * 100).toFixed(1)),
-        heart_pct: Number(((heartRate || 0) * 100).toFixed(1)),
+        ghosting_pct: ghostingRate == null ? null : Number((ghostingRate * 100).toFixed(1)),
+        heart_pct: heartRate == null ? null : Number((heartRate * 100).toFixed(1)),
         snr_pct: Number(snr.toFixed(1)),
-        core_audience: Math.floor(coreAudienceViews),
+        core_audience: coreAudienceViews == null ? null : Math.floor(coreAudienceViews),
         bot_probability: botProbability,
         bot_bucket: botBucket(botProbability),
         geo_reason: geoReason,
@@ -126,11 +181,11 @@ export function formatComputedMetricsBlock(m) {
 - **Handle**: @${m.handle}
 - **Platform**: ${m.platform}
 - **Niche**: ${m.niche}
-- **Ghosting rate**: ${m.ghosting_pct}%
-- **Heart rate**: ${m.heart_pct}%
+- **Ghosting rate**: ${m.ghosting_pct == null ? 'unknown' : `${m.ghosting_pct}%`}
+- **Heart rate**: ${m.heart_pct == null ? 'unknown' : `${m.heart_pct}%`}
 - **SNR (signal-to-noise)**: ${m.snr_pct}%
-- **Core audience (views floor)**: ${m.core_audience}
-- **Bot bucket**: ${m.bot_bucket} (p=${((m.bot_probability || 0) * 100).toFixed(0)}%)
+- **Core audience (views floor)**: ${m.core_audience ?? 'unknown (no measured views)'}
+- **Bot bucket**: ${m.bot_bucket}${m.bot_probability == null ? '' : ` (p=${(m.bot_probability * 100).toFixed(0)}%)`}
 - **Geo**: ${m.geo_reason}${warn}
 `;
 }
@@ -151,6 +206,9 @@ export function buildFinancialBlock({
     niche,
     deadAudienceWarning = '',
 }) {
+    if (coreAudienceViews == null) {
+        return '\n## 4. FINANCIAL MODEL (Reality Check)\nRevenue estimate unavailable: no measured views. Likes are not reach.\n';
+    }
     const core = Math.floor(coreAudienceViews);
     const formula = `${core} × ${moderateCr} × $${basePrice} × ${crMultiplier.toFixed(2)} = $${revModerate.toLocaleString('en-US')}`;
     return `
@@ -172,7 +230,8 @@ export function buildFinancialBlock({
  */
 export function scrubUnexpectedDollars(markdown, allowedBlocks = []) {
     const allowed = new Set();
-    const amountRe = /\$\s?[\d,]+(?:\.\d+)?/g;
+    // Treat magnitude suffixes as part of the amount: $100 million is NOT $100.
+    const amountRe = /\$\s*[\d,]+(?:\.\d+)?(?:\s*(?:thousand|million|billion|trillion|[kmbt])\b)?/gi;
     for (const block of allowedBlocks) {
         if (!block) continue;
         for (const m of String(block).matchAll(amountRe)) {

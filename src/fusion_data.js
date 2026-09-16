@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { calculateCore, applyFusionPenalty } from './metrics.js';
+import { measuredViews, measuredCore, pooledEngagement, applyFusionPenalty } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -27,11 +27,11 @@ const igData = JSON.parse(fs.readFileSync(igPath, 'utf8'));
 
 console.log(`Fusing data for ${ytHandle} (YT) and @${igHandle} (IG)...`);
 
-const ytViewsArray = ytData.videos.map(v => v.metrics.views);
-const igViewsArray = igData.videos.map(v => v.metrics.views);
+const ytViewsArray = ytData.videos.map(v => measuredViews(v, 'youtube')).filter(v => v !== null);
+const igViewsArray = igData.videos.map(v => measuredViews(v, 'instagram')).filter(v => v !== null);
 
-const ytCore0 = calculateCore(ytViewsArray);
-const igCore0 = calculateCore(igViewsArray);
+const ytCore0 = measuredCore(ytData.videos, 'youtube');
+const igCore0 = measuredCore(igData.videos, 'instagram');
 
 const avg = arr => {
     const positive = arr.filter(v => v > 0);
@@ -46,7 +46,9 @@ const { ytCore, igCore, fusionWarning } = applyFusionPenalty(ytCore0, igCore0, y
 
 // Cores are computed per platform and then added, so one platform's hype
 // cannot inflate the other's floor.
-const fusedCore = ytCore + igCore;
+const fusedCore = ytCore == null && igCore == null ? null : (ytCore ?? 0) + (igCore ?? 0);
+const coverageWarning = ytCore == null || igCore == null
+    ? 'Measured-view coverage incomplete: platforms without measured views are excluded from core and imbalance checks.' : '';
 
 const combinedAvgViews = avg([...ytViewsArray, ...igViewsArray]);
 
@@ -58,12 +60,12 @@ const fusedData = {
         subscribers: (ytData.global_metrics.subscribers || 0) + (igData.global_metrics.subscribers || 0),
         avg_views_last_10_videos: combinedAvgViews,
         total_raw_comments_fetched: (ytData.global_metrics.total_raw_comments_fetched || 0) + (igData.global_metrics.total_raw_comments_fetched || 0),
-        ghosting_rate: (ytData.global_metrics.ghosting_rate + igData.global_metrics.ghosting_rate) / 2,
-        heart_rate: (ytData.global_metrics.heart_rate + igData.global_metrics.heart_rate) / 2,
-        bot_probability: Math.max(ytData.global_metrics.bot_probability || 0.05, igData.global_metrics.bot_probability || 0.05),
+        ghosting_rate: pooledEngagement([ytData.global_metrics, igData.global_metrics], 'ghosting_rate'),
+        heart_rate: pooledEngagement([ytData.global_metrics, igData.global_metrics], 'heart_rate'),
+        bot_probability: null,
         niche: ytData.global_metrics.niche !== 'Unknown' ? ytData.global_metrics.niche : igData.global_metrics.niche,
         fused_core_audience: fusedCore,
-        fusion_warning: fusionWarning
+        fusion_warning: [fusionWarning, coverageWarning, 'Combined bot probability unknown: Instagram has no validated bot estimate.'].filter(Boolean).join(' ')
     },
     videos: [
         ...ytData.videos.map(v => ({ ...v, source_platform: 'youtube' })),

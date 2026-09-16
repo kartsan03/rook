@@ -3,9 +3,10 @@ import path from 'path';
 import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { generate } from './llm.js';
+import { assertCurrentBrief, requireGeneratedText } from './artifact_guard.js';
 import { buildQuoteAllowList, formatAllowListForPrompt, groundQuotes } from './comment_filter.js';
 import {
-    calculateCore,
+    measuredCore,
     detectGeoTier,
     estimateRevenue,
     buildComputedMetrics,
@@ -40,6 +41,12 @@ if (!fs.existsSync(briefPath)) {
     process.exit(1);
 }
 const theBrief = fs.readFileSync(briefPath, 'utf8');
+try {
+    assertCurrentBrief(theBrief, creatorData);
+} catch (error) {
+    console.error(error.message);
+    process.exit(1);
+}
 
 const benchmarksPath = path.join(rootDir, 'config', 'mock_benchmarks.json');
 const benchmarksData = JSON.parse(fs.readFileSync(benchmarksPath, 'utf8'));
@@ -55,13 +62,13 @@ const totalCleanComments = allowList.length;
 
 if (totalCleanComments === 0) {
     console.log(`Health check failed: @${creatorData.handle} has no comments with signal. Skipping dossier.`);
-    process.exit(0);
+    process.exit(2);
 }
 
-const videoViews = creatorData.videos.filter(v => v.metrics.views > 0).map(v => v.metrics.views);
-
-// Fusion mode pre-computes the core across platforms; single platform computes it here.
-const coreAudienceViews = creatorData.global_metrics.fused_core_audience || calculateCore(videoViews);
+// Fusion mode pre-computes the core across platforms; single platform uses measured views only.
+const coreAudienceViews = creatorData.platform === 'multi'
+    ? creatorData.global_metrics.fused_core_audience ?? null
+    : measuredCore(creatorData.videos, creatorData.platform);
 const deadAudienceWarning = creatorData.global_metrics.fusion_warning || '';
 
 const totalRawComments = creatorData.global_metrics.total_raw_comments_fetched || 1;
@@ -73,7 +80,7 @@ const snr = (totalCleanComments / totalRawComments) * 100;
 // No ghosting/bot double penalties: the core-audience floor already excludes
 // dead reach, and ghosting is a selling angle, not a conversion cut.
 const { isTier3, reason: geoReason } = detectGeoTier(creatorData.videos);
-const botProb = creatorData.global_metrics.bot_probability || 0.05;
+const botProb = creatorData.platform === 'instagram' ? null : creatorData.global_metrics.bot_probability ?? null;
 
 const {
     basePrice,
@@ -117,6 +124,7 @@ const financialBlock = buildFinancialBlock({
     deadAudienceWarning,
 });
 
+const revenueLabel = revModerate == null ? 'unavailable (no measured views; do not quote revenue)' : `$${revModerate.toLocaleString('en-US')}`;
 const contextText = `
 ${metricsBlock}
 
@@ -124,7 +132,7 @@ QUOTE ALLOW-LIST (numbered; any audience quote MUST be a substring of one of the
 ${formatAllowListForPrompt(allowList)}
 
 ### CALCULATED REVENUE (USE IN THE PITCH — do not invent other dollar figures):
-Expected base revenue: $${revModerate.toLocaleString('en-US')}
+Expected base revenue: ${revenueLabel}
 (Use this figure in the outreach pitch text.)
 
 ### INTERNAL BRIEF (pain points and archetype):
@@ -135,7 +143,7 @@ const synthPrompt = `
 You are the senior strategist. Produce the FIRST DRAFT of the offer and pitch.
 RULES:
 1. There is always exactly ONE offer (Unified Offer).
-2. Use the figure $${revModerate.toLocaleString('en-US')} in the pitch text as "missed revenue".
+2. Revenue: ${revenueLabel}. Only use a missed-revenue figure when available.
 3. The pitch must be bold but expert. Use direct audience quotes ONLY from the QUOTE ALLOW-LIST (copy substrings).
 4. Do NOT invent ghosting/SNR/core/bot/geo numbers — use COMPUTED METRICS only.
 
@@ -180,7 +188,7 @@ List the 2-3 main audience pain points, ALWAYS with direct quotes from the allow
 - **Ownership Strategy**: [Level Up or Launch]
 
 ## 5. [COPY-PASTE COLD OUTREACH]
-The DM text. Hit the pain point, use a quote from the allow-list, and name the missed-revenue figure ($${revModerate.toLocaleString('en-US')}).
+The DM text. Hit the pain point, use a quote from the allow-list, and name the missed-revenue figure only when available (${revenueLabel}).
 `;
 
 function formatPassFooter(passes) {
@@ -197,11 +205,13 @@ async function run() {
         fs.mkdirSync(path.join(rootDir, 'audits'), { recursive: true });
         console.log('   [1/3] Strategist: drafting the offer...');
         const draftRes = await generate(`${synthPrompt}\n\nDATA:\n${contextText}`);
+        requireGeneratedText(draftRes.text);
         passes.push({ name: 'strategist', provider: draftRes.provider, model: draftRes.model });
         fs.writeFileSync(path.join(rootDir, 'audits', `debug_${runId}_draft.md`), draftRes.text);
 
         console.log('   [2/3] Critic: finding weak spots...');
         const critiqueRes = await generate(`${criticPrompt}\n\nDATA:\nCONTEXT:\n${contextText}\n\nSTRATEGIST DRAFT:\n${draftRes.text}`);
+        requireGeneratedText(critiqueRes.text);
         passes.push({ name: 'critic', provider: critiqueRes.provider, model: critiqueRes.model });
         fs.writeFileSync(path.join(rootDir, 'audits', `debug_${runId}_critique.md`), critiqueRes.text);
 
@@ -209,7 +219,7 @@ async function run() {
         const finalRes = await generate(`${refinerPrompt}\n\nDATA:\nCONTEXT:\n${contextText}\n\nDRAFT:\n${draftRes.text}\n\nCRITIQUE:\n${critiqueRes.text}`);
         passes.push({ name: 'refiner', provider: finalRes.provider, model: finalRes.model });
 
-        let finalBrief = finalRes.text;
+        let finalBrief = requireGeneratedText(finalRes.text);
         const grounded = groundQuotes(finalBrief, allowList);
         if (grounded.stripped > 0) {
             console.warn(`   Quote gate: stripped ${grounded.stripped} ungrounded quote(s).`);

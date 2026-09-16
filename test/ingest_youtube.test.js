@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { measureEngagement } from '../src/metrics.js';
 
 // Run the CLI body with offline I/O doubles. No yt-dlp, API keys or real writes.
 const source = fs.readFileSync(new URL('../src/ingest_youtube.js', import.meta.url), 'utf8')
@@ -20,6 +21,7 @@ async function ingest(execSync) {
     let status = 0;
     const context = vm.createContext({
         execSync,
+        measureEngagement,
         YoutubeTranscript: { fetchTranscript: async () => [] },
         fs: {
             mkdirSync() {},
@@ -88,6 +90,26 @@ test('YouTube ingest: sizing retries after first failure and restores channel me
     assert.equal(raw.videos.length, 1);
     assert.equal(raw.videos[0].video_id, 'second');
     assert.equal(r.files.get(r.rawPath), r.files.get(r.latestPath));
+});
+
+test('YouTube ingest: ghosting counts audience comments once, excluding creator replies', async () => {
+    const r = await ingest(command => {
+        if (command.includes('--get-id')) return 'first';
+        return JSON.stringify({
+            ...JSON.parse(metadata),
+            comments: [
+                { id: 'a', text: 'Please explain this topic', is_favorited: true },
+                { id: 'b', text: 'Another unanswered question' },
+                { id: 'r1', parent: 'a', text: 'Creator response here', author_is_uploader: true },
+                { id: 'r2', parent: 'a', text: 'Another creator response', author_id: 'channel-fixture' },
+            ],
+        });
+    });
+    const raw = JSON.parse(r.files.get(r.rawPath));
+    assert.equal(raw.global_metrics.ghosting_rate, 0.5);
+    assert.equal(raw.global_metrics.heart_rate, 0.5);
+    assert.equal(raw.global_metrics.total_raw_comments_fetched, 2);
+    assert.equal(raw.videos[0].top_comments.length, 2);
 });
 
 test('YouTube ingest: successful sizing is reused when a later detail fetch fails', async () => {

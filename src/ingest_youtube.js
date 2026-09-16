@@ -3,6 +3,7 @@ import { YoutubeTranscript } from 'youtube-transcript';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { measureEngagement } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -75,7 +76,7 @@ let commentLimit = 50;
 
 let totalCommentsScanned = 0;
 let totalHearts = 0;
-let totalAuthorReplies = 0;
+let totalAcknowledged = 0;
 
 for (let i = 0; i < videoIds.length; i++) {
     const vid = videoIds[i];
@@ -106,28 +107,23 @@ for (let i = 0; i < videoIds.length; i++) {
         const meta = JSON.parse(metaResult.trim().split('\n')[0]);
 
         const topComments = [];
-        if (meta.comments) {
-            for (const c of meta.comments) {
-                totalCommentsScanned++;
-                if (c.is_favorited) totalHearts++;
-                if (c.author_is_uploader || c.author_id === creatorData.creator_id) {
-                    totalAuthorReplies++;
-                }
-
-                if (c.text && c.text.trim().length > 0) {
-                    const parsed = c.timestamp ? new Date(c.timestamp * 1000) : null;
-                    // Missing timestamp → null (rendered as date_unknown downstream).
-                    // Never invent scrape-time new Date() as the comment date.
-                    const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : null;
-                    topComments.push({
-                        text: c.text,
-                        date: iso,
-                        has_heart: c.is_favorited || false
-                    });
-                }
-            }
+        const engagement = measureEngagement((meta.comments || []).map(c => ({
+            ...c,
+            parent_id: c.parent,
+            is_creator: !!c.author_is_uploader || !!creatorData.creator_id && c.author_id === creatorData.creator_id,
+            has_heart: !!c.is_favorited,
+        })));
+        totalCommentsScanned += engagement.audience.length;
+        totalHearts += engagement.hearted;
+        totalAcknowledged += engagement.acknowledged;
+        for (const c of engagement.audience) {
+            const parsed = c.timestamp ? new Date(c.timestamp * 1000) : null;
+            // Missing timestamp → null (rendered as date_unknown downstream).
+            // Never invent scrape-time new Date() as the comment date.
+            const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : null;
+            topComments.push({ text: c.text, date: iso, has_heart: c.has_heart });
         }
-        console.log(`Comments collected: ${topComments.length}. Hearts so far: ${totalHearts}, creator replies: ${totalAuthorReplies}`);
+        console.log(`Comments collected: ${topComments.length}. Hearts so far: ${totalHearts}, acknowledged audience comments: ${totalAcknowledged}`);
         creatorData.global_metrics.total_raw_comments_fetched += topComments.length;
 
         let transcriptText = '';
@@ -167,9 +163,8 @@ if (validVideosCount === 0) {
 }
 
 // Ghosting = share of comments the creator neither hearted nor replied to.
-const engagementRate = totalCommentsScanned > 0 ? ((totalHearts + totalAuthorReplies) / totalCommentsScanned) : 0;
-creatorData.global_metrics.heart_rate = totalCommentsScanned > 0 ? (totalHearts / totalCommentsScanned) : 0;
-creatorData.global_metrics.ghosting_rate = 1 - Math.min(1, engagementRate);
+creatorData.global_metrics.heart_rate = totalCommentsScanned > 0 ? totalHearts / totalCommentsScanned : null;
+creatorData.global_metrics.ghosting_rate = totalCommentsScanned > 0 ? 1 - totalAcknowledged / totalCommentsScanned : null;
 
 // A channel whose recent videos reach almost none of its subscribers is
 // likely botted or decayed; downstream math cuts conversion for it.
@@ -188,4 +183,4 @@ const flowPath = path.join(rootDir, 'data', 'latest_creator_data.json');
 fs.writeFileSync(flowPath, JSON.stringify(creatorData, null, 2));
 
 console.log(`\nIngestion done. Saved to data/raw_${creatorData.handle}.json`);
-console.log(`Ghosting Rate: ${(creatorData.global_metrics.ghosting_rate * 100).toFixed(1)}%`);
+console.log(`Ghosting Rate: ${creatorData.global_metrics.ghosting_rate == null ? 'unknown' : `${(creatorData.global_metrics.ghosting_rate * 100).toFixed(1)}%`}`);

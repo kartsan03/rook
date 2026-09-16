@@ -19,7 +19,7 @@ The pipeline is five small scripts run in sequence, plus a batch runner. No fram
 4. `src/process_brief.js` filters out noise comments (emoji-only, very short, thank-yous in several languages, duplicates), then asks Gemini for The Brief: pain freshness, promo fatigue, commercial intent, ghosting, geo tier, creator archetype, top pain points.
 5. `src/process_logic.js` runs the deterministic revenue math (core audience x niche conversion rate x geo-adjusted ticket price, with penalties for low comment signal and likely bot audiences), then three LLM passes (strategist draft, critic, refiner) to produce the final dossier.
 
-`src/batch_analyze.js` runs the whole sequence over a targets file and prints a success/failure summary.
+`src/batch_analyze.js` runs the whole sequence over a targets file and reports SUCCESS / SKIPPED / FAILED. Exit codes: 0 when all targets succeed, 1 if any fail, 2 for skips without failures (including an empty target list). No audience signal means SKIPPED, not a successful dossier.
 
 Gemini is the primary model (`gemini-3.6-flash` by default, override with `GEMINI_MODEL` — `gemini-3.5-flash-lite` is the cheapest current-generation option). Calls use `temperature: 0`. On rate limits the pipeline waits and retries; when the Gemini quota is exhausted mid-run it **fails loud** (banner + error) unless `ROOK_ALLOW_LLM_FALLBACK=1`, in which case it falls back to OpenAI (`gpt-5-mini` by default, override with `OPENAI_MODEL`) if a key is present. With no Gemini key, OpenAI is the primary provider (not a mid-run fallback).
 
@@ -98,6 +98,8 @@ The `--niche` value selects a row in `config/mock_benchmarks.json` (conversion r
 - `audits/investment_brief_<handle>_<timestamp>.md`: the final dossier, including the financial model and the outreach text
 - `audits/debug_<run>_draft.md`, `audits/debug_<run>_critique.md`: intermediate LLM passes, kept for inspection
 
+Briefs carry a SHA-256 fingerprint of their parsed input. The dossier rejects a Brief from different data or a legacy Brief without a fingerprint; regenerate it with `process_brief.js`. Empty LLM responses fail without replacing the previous Brief or publishing a final dossier.
+
 `examples/` contains a full brief and dossier for a fictional creator, so you can see the output format without running anything.
 
 ## Checking your setup
@@ -134,9 +136,11 @@ audits/                     generated briefs and dossiers (gitignored)
 
 - The benchmark table is illustrative, not market research. Revenue estimates are only as good as the numbers you put in `config/mock_benchmarks.json`.
 - YouTube scraping depends on `yt-dlp` and breaks when YouTube changes; keep `yt-dlp` updated.
-- Instagram photo posts have no view count, so reach is approximated as likes x 10.
+- Instagram reach uses measured `videoPlayCount` only; likes are not converted to views. Unknown views are excluded from core/fusion comparisons; with no measured views, revenue is unavailable, not $0. Legacy Instagram raw files without `views_source: "videoPlayCount"` must be re-ingested, and old fused files regenerated.
+- Instagram and combined-platform bot probability are unknown, not a fabricated low-risk score. No bot penalty is applied when the estimate is unknown; this is not evidence that the audience is authentic.
 - Geo detection only distinguishes Cyrillic and Devanagari script shares; a Spanish- or Portuguese-speaking audience is priced as Tier 1/2.
-- The ghosting rate only sees the comments that were fetched, not the full comment history.
+- Ghosting measures fetched audience comments with neither a heart nor a matched creator reply. Hearts and replies count once per comment; creator messages are excluded. Missing reply links can overstate ghosting. Empty samples are unknown; fusion weights rates by audience-comment counts.
+- Grounded quotes receive code-owned source-date annotations. Inline ISO/English month-first dates and adjacent standalone ISO-date labels are normalized; this is not a general validator of every free-prose date claim.
 - The dossier text is LLM output. The numbers in the financial block are computed, everything else is generated. Read it before you send it to anyone.
 
 ## Privacy and responsible use

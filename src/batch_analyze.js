@@ -193,6 +193,7 @@ for (let i = 0; i < targets.length; i++) {
     console.log(`[${i + 1}/${targets.length}] Processing: ${target.platform.toUpperCase()}`);
     console.log(`================================================================`);
 
+    let analysisStage = false;
     try {
         let handle = '';
         let rawDataPath = '';
@@ -228,6 +229,7 @@ for (let i = 0; i < targets.length; i++) {
         }
 
         // Analyze the specific raw file so parallel/previous runs cannot bleed into this one
+        analysisStage = true;
         console.log(`Building The Brief for ${handle}...`);
         execSync(`node src/process_brief.js "${rawDataPath}"`, { stdio: 'inherit', cwd: rootDir });
 
@@ -242,8 +244,8 @@ for (let i = 0; i < targets.length; i++) {
         summary.push({
             handle: target.platform === 'youtube' ? target.url : (target.platform === 'instagram' ? target.username : `${target.ytUrl}|${target.igUsername}`),
             platform: target.platform,
-            status: 'FAILED',
-            error: err.message
+            status: analysisStage && err.status === 2 ? 'SKIPPED' : 'FAILED',
+            error: analysisStage && err.status === 2 ? 'No audience signal; no dossier produced.' : err.message
         });
 
         if (err.message.includes('Apify') || err.message.includes('credit') || err.message.includes('billing')) {
@@ -258,6 +260,8 @@ console.log(`================================================================`);
 let successCount = 0;
 summary.forEach((s, idx) => {
     if (s.status === 'SUCCESS') successCount++;
-    console.log(`  [${idx + 1}] ${s.handle} (${s.platform}): ${s.status}${s.status === 'FAILED' ? ` (error: ${s.error})` : ''}`);
+    console.log(`  [${idx + 1}] ${s.handle} (${s.platform}): ${s.status}${s.status !== 'SUCCESS' ? ` (${s.error})` : ''}`);
 });
 console.log(`\nSucceeded: ${successCount}/${targets.length}`);
+if (summary.some(s => s.status === 'FAILED')) process.exitCode = 1;
+else if (summary.some(s => s.status === 'SKIPPED') || targets.length === 0) process.exitCode = 2;

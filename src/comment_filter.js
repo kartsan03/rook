@@ -15,8 +15,10 @@ export function isSignal(text) {
 export function formatCommentDate(date) {
     if (date == null || date === '') return 'date_unknown';
     const s = String(date);
-    if (s === 'date_unknown' || s.startsWith('Invalid')) return 'date_unknown';
-    return s.substring(0, 10);
+    const day = s.substring(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return 'date_unknown';
+    const parsed = new Date(`${day}T00:00:00Z`);
+    return !isNaN(parsed) && parsed.toISOString().substring(0, 10) === day ? day : 'date_unknown';
 }
 
 /**
@@ -65,11 +67,11 @@ export function extractQuotedSpans(markdown) {
     return spans;
 }
 
-function isGrounded(quote, allowList) {
+function matchingComments(quote, allowList) {
     // One-direction only: allow-list text must contain the quote (optional whitespace normalize).
     // Bidirectional / prefix-40 reverse hatch rejected padded hallucinations.
     const q = quote.toLowerCase().replace(/\s+/g, ' ').trim();
-    return allowList.some(c => {
+    return allowList.filter(c => {
         const allow = c.text.toLowerCase().replace(/\s+/g, ' ').trim();
         return allow.includes(q);
     });
@@ -85,7 +87,7 @@ export function groundQuotes(markdown, allowList) {
     let text = markdown || '';
     const spans = extractQuotedSpans(text);
     for (const quote of spans) {
-        if (!isGrounded(quote, allowList)) {
+        if (!matchingComments(quote, allowList).length) {
             ungrounded.push(quote);
             // Strip *Quote:* / Quote: lines that contain this span
             const esc = quote.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -94,6 +96,35 @@ export function groundQuotes(markdown, allowList) {
             text = text.replace(new RegExp(`["“]${esc}["”]`, 'g'), '[quote removed: ungrounded]');
         }
     }
+    // Dates next to quotes are evidence, not LLM prose. Replace them with
+    // source dates on the same line; ambiguous substrings remain date_unknown.
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const quotes = extractQuotedSpans(line).filter(q => matchingComments(q, allowList).length);
+        if (!quotes.length) continue;
+        const dates = quotes.map(q => {
+            const candidates = new Set(matchingComments(q, allowList).map(c => formatCommentDate(c.date)));
+            return candidates.size === 1 ? [...candidates][0] : 'date_unknown';
+        });
+        // Drop standalone adjacent ISO-date labels as well as inline dates.
+        for (const neighbor of [i - 1, i + 1]) {
+            if (/^\s*[*_\-\s]*(?:date\s*:\s*)?\(?\d{4}-\d{2}-\d{2}\)?[*_\s]*$/i.test(lines[neighbor] || '')) {
+                lines[neighbor] = '';
+            }
+        }
+        // Preserve the surrounding pitch. Only date labels outside the quote
+        // are removed; a date inside a grounded source quote stays verbatim.
+        const dateRe = /\b\d{4}-\d{2}-\d{2}\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b|\bdate_unknown\b/gi;
+        let quoteIndex = 0;
+        lines[i] = line.split(/("[^"\n]{8,}"|“[^”\n]{8,}”)/g).map(part => {
+            if (/^["“]/.test(part)) {
+                return `${part} [source date: ${dates[quoteIndex++]}]`;
+            }
+            return part.replace(dateRe, '').replace(/\(\s*\)/g, '');
+        }).join('');
+    }
+    text = lines.join('\n');
     // Collapse excessive blank lines left by stripping
     text = text.replace(/\n{3,}/g, '\n\n').trim() + (markdown ? '\n' : '');
     return { text, stripped: ungrounded.length, ungrounded };
