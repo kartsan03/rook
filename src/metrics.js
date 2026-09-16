@@ -11,6 +11,22 @@ export function calculateCore(viewsArray) {
     return validViews[Math.floor(validViews.length * 0.1)];
 }
 
+// Fusion penalizes only the weaker platform when both have reach and the
+// average-view gap exceeds 20x. Keep the warning tied to the penalized core.
+export function applyFusionPenalty(ytCore, igCore, ytAvgViews, igAvgViews) {
+    let fusionWarning = '';
+    if (ytAvgViews > 0 && igAvgViews > 0) {
+        if (ytAvgViews > igAvgViews * 20) {
+            igCore = Math.floor(igCore / 7);
+            fusionWarning = 'DEAD AUDIENCE PENALTY: Instagram core cut 7x due to critical platform imbalance (>20x gap vs YouTube).';
+        } else if (igAvgViews > ytAvgViews * 20) {
+            ytCore = Math.floor(ytCore / 7);
+            fusionWarning = 'DEAD AUDIENCE PENALTY: YouTube core cut 7x due to critical platform imbalance (>20x gap vs Instagram).';
+        }
+    }
+    return { ytCore, igCore, fusionWarning };
+}
+
 // Geo detection: if most comment text is Cyrillic or Devanagari script,
 // the audience is priced as Tier 3.
 export function detectGeoTier(videos) {

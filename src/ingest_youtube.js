@@ -83,7 +83,10 @@ for (let i = 0; i < videoIds.length; i++) {
     const videoUrl = `https://www.youtube.com/watch?v=${vid}`;
 
     try {
-        if (i === 0) {
+        // Retry sizing on later videos if an earlier attempt failed: one broken
+        // video must not freeze subscribers=0 / creator_id='' for the whole run
+        // (the bot gate and creator-reply detection depend on both).
+        if (i === 0 || !creatorData.creator_id) {
             console.log('Sizing the channel...');
             const fastMetaCmd = `yt-dlp -j --skip-download "${videoUrl}"`;
             const fastMeta = JSON.parse(execSync(fastMetaCmd, { encoding: 'utf8' }).trim());
@@ -155,6 +158,12 @@ for (let i = 0; i < videoIds.length; i++) {
 creatorData.global_metrics.subscribers = totalSubscribers;
 if (validVideosCount > 0) {
     creatorData.global_metrics.avg_views_last_10_videos = Math.floor(totalViews / validVideosCount);
+}
+
+// Never overwrite a previous profile with empty data, including empty listings.
+if (validVideosCount === 0) {
+    console.error('Error: no videos fetched successfully; keeping existing data files untouched.');
+    process.exit(1);
 }
 
 // Ghosting = share of comments the creator neither hearted nor replied to.

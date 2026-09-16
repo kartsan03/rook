@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { calculateCore } from './metrics.js';
+import { calculateCore, applyFusionPenalty } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -30,8 +30,8 @@ console.log(`Fusing data for ${ytHandle} (YT) and @${igHandle} (IG)...`);
 const ytViewsArray = ytData.videos.map(v => v.metrics.views);
 const igViewsArray = igData.videos.map(v => v.metrics.views);
 
-let ytCore = calculateCore(ytViewsArray);
-let igCore = calculateCore(igViewsArray);
+const ytCore0 = calculateCore(ytViewsArray);
+const igCore0 = calculateCore(igViewsArray);
 
 const avg = arr => {
     const positive = arr.filter(v => v > 0);
@@ -42,14 +42,7 @@ const igAvgViews = avg(igViewsArray);
 
 // Dead audience trap: if one platform out-reaches the other by >20x, the weaker
 // one is likely dead weight, so its core is cut before the cores are added.
-let fusionWarning = '';
-if ((ytAvgViews > 0 && igAvgViews > 0) && (ytAvgViews > igAvgViews * 20)) {
-    ytCore = Math.floor(ytCore / 7);
-    fusionWarning = 'DEAD AUDIENCE PENALTY: YouTube core cut 7x due to critical platform imbalance (>20x gap vs Instagram).';
-} else if ((ytAvgViews > 0 && igAvgViews > 0) && (igAvgViews > ytAvgViews * 20)) {
-    igCore = Math.floor(igCore / 7);
-    fusionWarning = 'DEAD AUDIENCE PENALTY: Instagram core cut 7x due to critical platform imbalance (>20x gap vs YouTube).';
-}
+const { ytCore, igCore, fusionWarning } = applyFusionPenalty(ytCore0, igCore0, ytAvgViews, igAvgViews);
 
 // Cores are computed per platform and then added, so one platform's hype
 // cannot inflate the other's floor.

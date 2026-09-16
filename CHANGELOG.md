@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Fusion dead-audience penalty now cuts the **weaker** platform's core. It used to cut the stronger side (the opposite of the documented rule), deflating fused core and revenue estimates for every imbalanced creator (~6.5x in the audit example). Pure logic moved to `applyFusionPenalty` in `src/metrics.js` with unit tests (`test/fusion.test.js`); fusion_data.js keeps the same CLI behavior.
+- `ingest_youtube.js` exits with an error and leaves existing `data/raw_*.json` / `data/latest_creator_data.json` untouched when every video fetch fails. Before, a fully failed run still wrote `videos: []` over both files with exit 0.
+- `ingest_youtube.js` retries channel sizing on a later video if the first attempt failed. Previously one failed sizing call froze `subscribers: 0` and `creator_id: ''` for the whole run, breaking the bot gate and creator-reply detection.
 - `isGrounded` is one-direction only (`allowText.includes(quote)`); padded hallucinations no longer pass via reverse/prefix hatch.
 - COMPUTED METRICS block is spliced into saved Brief/Dossier markdown after quote grounding (not prompt-only).
 - Unexpected `$` amounts outside code-owned §4 / metrics are scrubbed from saved markdown.
